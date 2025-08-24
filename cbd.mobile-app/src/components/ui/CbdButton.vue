@@ -5,6 +5,7 @@
 			`cbd-button--${variant}`,
 			`cbd-button--${size}`,
 			{ 'cbd-button--loading': loading },
+			{ 'touch-optimized': isTouchDevice },
 		]"
 		:color="quasarColor"
 		:size="size"
@@ -15,7 +16,8 @@
 		:rounded="rounded"
 		:icon="icon"
 		:icon-right="iconRight"
-		@click="handleClick"
+		@click="onClick"
+		v-bind="touchHandlers"
 		v-bind="$attrs"
 	>
 		<template v-if="$slots.default">
@@ -29,6 +31,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useTouchButton } from "@/composables/useTouch";
 
 interface Props {
 	variant?: "primary" | "secondary" | "success" | "danger" | "ghost";
@@ -39,6 +42,8 @@ interface Props {
 	loading?: boolean;
 	disabled?: boolean;
 	rounded?: boolean;
+	hapticStyle?: "light" | "medium" | "heavy";
+	enableLongPress?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -48,10 +53,13 @@ const props = withDefaults(defineProps<Props>(), {
 	loading: false,
 	disabled: false,
 	rounded: false,
+	hapticStyle: "medium",
+	enableLongPress: false,
 });
 
 const emit = defineEmits<{
 	click: [event: Event];
+	longPress?: [];
 }>();
 
 // Маппинг наших вариантов на цвета Quasar
@@ -65,6 +73,16 @@ const quasarColor = computed(() => {
 	};
 	return colorMap[props.variant];
 });
+
+// Touch optimization
+const { onClick, isTouchDevice, ...touchHandlers } = useTouchButton(
+	(event) => handleClick(event),
+	{
+		hapticStyle: props.hapticStyle,
+		enableLongPress: props.enableLongPress,
+		longPressCallback: () => emit("longPress"),
+	}
+);
 
 function handleClick(event: Event) {
 	if (!props.disabled && !props.loading) {

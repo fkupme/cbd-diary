@@ -1,0 +1,71 @@
+{
+  "name": "cbd-diary-monorepo",
+  "version": "1.0.0",
+  "description": "CBD Diary - Cognitive Behavioral Therapy mood tracking application",
+  "scripts": {
+    "start": "npm run start:dev",
+    "start:dev": "concurrently \"npm run backend:dev\" \"npm run mobile:dev\"",
+    "start:prod": "docker-compose up -d",
+    "stop": "docker-compose down",
+    
+    "backend:dev": "cd cbd.web-api && npm run start:dev",
+    "backend:build": "cd cbd.web-api && npm run build",
+    "backend:test": "cd cbd.web-api && npm run test",
+    "backend:migrate": "cd cbd.web-api && npm run db:migrate",
+    "backend:seed": "cd cbd.web-api && npm run db:seed",
+    "backend:studio": "cd cbd.web-api && npm run db:studio",
+    
+    "mobile:dev": "cd cbd.mobile-app && npm run tauri:dev",
+    "mobile:build": "cd cbd.mobile-app && npm run tauri:build",
+    "mobile:android": "cd cbd.mobile-app && npm run android:dev",
+    "mobile:ios": "cd cbd.mobile-app && npm run ios:dev",
+    
+    "install:all": "npm install && cd cbd.web-api && npm install && cd ../cbd.mobile-app && npm install",
+    "clean": "npm run clean:backend && npm run clean:mobile",
+    "clean:backend": "cd cbd.web-api && rm -rf node_modules dist",
+    "clean:mobile": "cd cbd.mobile-app && rm -rf node_modules dist",
+    
+    "lint": "npm run lint:backend",
+    "lint:backend": "cd cbd.web-api && npm run lint",
+    "lint:mobile": "cd cbd.mobile-app && npm run lint || echo 'Mobile linting not configured'",
+    
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "docker:restart": "docker-compose restart",
+    
+    "db:migrate": "cd cbd.web-api && npm run db:migrate",
+    "db:seed": "cd cbd.web-api && npm run db:seed",
+    "db:studio": "cd cbd.web-api && npm run db:studio",
+    "db:reset": "cd cbd.web-api && npx prisma migrate reset",
+    
+    "migrate:thoughts": "cd cbd.web-api && npx ts-node scripts/migrate-thoughts-to-normalized.ts",
+    
+    "setup": "npm run install:all && npm run db:migrate && npm run db:seed",
+    "setup:docker": "docker-compose up -d postgres redis && sleep 5 && npm run db:migrate && npm run db:seed"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "workspaces": [
+    "cbd.web-api",
+    "cbd.mobile-app"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "keywords": [
+    "cbt",
+    "cognitive-behavioral-therapy",
+    "mood-tracking",
+    "mental-health",
+    "tauri",
+    "nestjs",
+    "prisma",
+    "postgresql"
+  ],
+  "author": "CBD Diary Team",
+  "license": "MIT"
+}
