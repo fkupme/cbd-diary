@@ -1,0 +1,217 @@
+/* Mobile Touch Optimizations */
+/* Remove hover states and add touch-friendly interactions */
+
+/* Media query for touch devices */
+@media (hover: none) and (pointer: coarse) {
+  /* Remove all hover effects on touch devices */
+  * {
+    &:hover {
+      /* Reset hover styles to normal state */
+      background-color: inherit !important;
+      color: inherit !important;
+      transform: none !important;
+      box-shadow: inherit !important;
+      border-color: inherit !important;
+      opacity: inherit !important;
+    }
+  }
+
+  /* Touch-friendly button styles */
+  .q-btn,
+  button,
+  .action-card,
+  .entry-card,
+  .profile-btn,
+  .see-all-btn,
+  .add-emotion-btn,
+  .add-thought-btn,
+  .expand-btn,
+  .ai-chat-btn {
+    /* Add touch feedback with active states instead of hover */
+    &:active {
+      transform: scale(0.98);
+      background-color: rgba(0, 0, 0, 0.1);
+      transition: all 0.1s ease;
+    }
+
+    /* Ensure minimum touch target size (44px recommended) */
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Touch-friendly card interactions */
+  .entry-card,
+  .stat-card,
+  .action-card {
+    &:active {
+      transform: scale(0.99);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+  }
+
+  /* Touch-friendly form elements */
+  .q-field__control {
+    &:active,
+    &:focus-within {
+      border-color: var(--q-primary);
+      box-shadow: 0 0 0 2px rgba(var(--q-primary), 0.2);
+    }
+  }
+
+  /* Improve touch targets for small elements */
+  .remove-btn,
+  .emotion-chip,
+  .filter-tab {
+    padding: 8px 12px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Touch scrolling improvements */
+  .q-scrollarea,
+  .scroll-area {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* Remove text selection on touch elements */
+  .q-btn,
+  button,
+  .action-card,
+  .entry-card,
+  .tab-bar,
+  .emotion-chip {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Touch-friendly spacing */
+  .q-list .q-item {
+    min-height: 56px; /* Increased for better touch targets */
+    padding: 12px 16px;
+  }
+
+  /* Improve touch feedback for interactive elements */
+  .interactive-element {
+    &:active {
+      background-color: rgba(0, 0, 0, 0.08);
+    }
+  }
+}
+
+/* High DPI touch screens */
+@media (hover: none) and (pointer: coarse) and (-webkit-min-device-pixel-ratio: 2) {
+  /* Adjust for high DPI screens */
+  .q-btn,
+  button {
+    border-radius: 8px; /* Slightly larger radius for crisp rendering */
+  }
+}
+
+/* Tablet-specific optimizations */
+@media (hover: none) and (pointer: coarse) and (min-width: 768px) {
+  /* Larger touch targets for tablets */
+  .q-btn,
+  button {
+    min-height: 48px;
+    min-width: 48px;
+    padding: 12px 20px;
+  }
+
+  .entry-card,
+  .action-card {
+    padding: 20px;
+  }
+}
+
+/* Focus management for accessibility */
+@media (hover: none) and (pointer: coarse) {
+  /* Ensure focus indicators are visible */
+  .q-btn:focus-visible,
+  button:focus-visible,
+  .q-field:focus-within {
+    outline: 2px solid var(--q-primary);
+    outline-offset: 2px;
+  }
+
+  /* Remove default focus outline and add custom */
+  .q-btn:focus,
+  button:focus {
+    outline: none;
+  }
+}
+
+/* Touch gestures and swipe support */
+.touch-gestures {
+  touch-action: manipulation; /* Optimize for pan and zoom */
+}
+
+.swipe-area {
+  touch-action: pan-x; /* Allow horizontal swiping */
+}
+
+.no-touch-action {
+  touch-action: none; /* Disable touch actions for custom gesture handling */
+}
+
+/* Performance optimizations for touch */
+.touch-optimized {
+  /* Use transform and opacity for smooth animations */
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0); /* Enable hardware acceleration */
+}
+
+/* Haptic feedback styles (visual indicators) */
+.haptic-light {
+  &:active {
+    animation: haptic-pulse-light 0.15s ease-out;
+  }
+}
+
+.haptic-medium {
+  &:active {
+    animation: haptic-pulse-medium 0.2s ease-out;
+  }
+}
+
+.haptic-heavy {
+  &:active {
+    animation: haptic-pulse-heavy 0.25s ease-out;
+  }
+}
+
+@keyframes haptic-pulse-light {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.98); }
+  100% { transform: scale(1); }
+}
+
+@keyframes haptic-pulse-medium {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+
+@keyframes haptic-pulse-heavy {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+
+/* Dark mode touch optimizations */
+@media (hover: none) and (pointer: coarse) and (prefers-color-scheme: dark) {
+  .q-btn:active,
+  button:active {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .entry-card:active,
+  .action-card:active {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+}

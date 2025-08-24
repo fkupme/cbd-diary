@@ -1,0 +1,157 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: cbd-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cbd_diary_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password}
+      POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-trust}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./cbd.web-api/docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-cbd_diary_dev}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cbd-network
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    container_name: cbd-redis-dev
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cbd-network
+
+  # Backend API (Development)
+  api-dev:
+    build:
+      context: ./cbd.web-api
+      dockerfile: Dockerfile.dev
+    container_name: cbd-api-dev
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:dev_password@postgres:5432/cbd_diary_dev?schema=public
+      CORS_ORIGIN: http://localhost:5173
+      NODE_ENV: development
+      PORT: 3002
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: cbd_diary_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev_password
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev_access_secret_key_123}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev_refresh_secret_key_456}
+      JWT_ACCESS_EXPIRE: 15m
+      JWT_REFRESH_EXPIRE: 7d
+      APP_API_PREFIX: api
+      APP_API_VERSION: v1
+    volumes:
+      - ./cbd.web-api:/app
+      - /app/node_modules
+      - /app/dist
+    ports:
+      - '3002:3002'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - cbd-network
+    command: npm run start:dev
+
+  # Prisma Studio (Database Admin)
+  prisma-studio:
+    build:
+      context: ./cbd.web-api
+      dockerfile: Dockerfile.dev
+    container_name: cbd-prisma-studio
+    environment:
+      DATABASE_URL: postgresql://postgres:dev_password@postgres:5432/cbd_diary_dev?schema=public
+      NODE_ENV: development
+    volumes:
+      - ./cbd.web-api:/app
+      - /app/node_modules
+    ports:
+      - '5555:5555'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cbd-network
+    command: npx prisma studio --hostname 0.0.0.0 --port 5555
+
+  # Database Admin UI
+  adminer:
+    image: adminer:latest
+    container_name: cbd-adminer-dev
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    depends_on:
+      - postgres
+    networks:
+      - cbd-network
+
+  # Production API (for testing production builds)
+  api-prod:
+    build:
+      context: ./cbd.web-api
+      dockerfile: Dockerfile
+    container_name: cbd-api-prod
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:dev_password@postgres:5432/cbd_diary_dev?schema=public
+      CORS_ORIGIN: http://localhost:5173
+      NODE_ENV: production
+      PORT: 3003
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: cbd_diary_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: dev_password
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev_access_secret_key_123}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev_refresh_secret_key_456}
+      JWT_ACCESS_EXPIRE: 15m
+      JWT_REFRESH_EXPIRE: 7d
+      APP_API_PREFIX: api
+      APP_API_VERSION: v1
+    ports:
+      - '3003:3003'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - cbd-network
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  cbd-network:
+    driver: bridge

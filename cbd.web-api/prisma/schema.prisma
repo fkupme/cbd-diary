@@ -85,6 +85,7 @@ model Emotion {
   category         EmotionCategory @relation(fields: [categoryId], references: [id])
   oppositeEmotion  Emotion?        @relation("EmotionOpposite", fields: [oppositeEmotionId], references: [id])
   oppositeEmotions Emotion[]       @relation("EmotionOpposite")
+  emotionEntries   EmotionEntry[]  // NEW: Normalized emotion entries
 
   @@map("emotions")
 }
@@ -97,7 +98,7 @@ model CbtEntry {
 
   // СМЭР модель
   situation String
-  thoughts  Json   @default("[]") // JSON массив ThoughtChain
+  thoughts  Json   @default("[]") // JSON массив ThoughtChain (DEPRECATED - use thoughtChains relation)
   reactions String
 
   // Метаданные настроения
@@ -119,14 +120,81 @@ model CbtEntry {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Отношения
-  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  chat Chat?
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat          Chat?
+  thoughtChains ThoughtChain[] // NEW: Normalized thought chains
 
   @@index([userId, entryDate(sort: Desc)], name: "idx_cbt_entries_user_date")
   @@index([entryDate], name: "idx_cbt_entries_entry_date")
   @@index([isSynced], name: "idx_cbt_entries_is_synced")
   @@index([serverId], name: "idx_cbt_entries_server_id")
   @@map("cbt_entries")
+}
+
+// === ЦЕПОЧКИ МЫСЛЕЙ (НОРМАЛИЗОВАННЫЕ) ===
+model ThoughtChain {
+  id          String   @id @default(uuid())
+  cbtEntryId  String   @map("cbt_entry_id")
+  thought     String   // Текст мысли
+  isAutomatic Boolean  @default(false) @map("is_automatic") // Автоматическая мысль
+  intensity   Int      @default(5) @db.SmallInt // 1-10
+  orderIndex  Int      @default(0) @map("order_index") // Порядок в записи
+
+  // Метаданные
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Отношения
+  cbtEntry             CbtEntry             @relation(fields: [cbtEntryId], references: [id], onDelete: Cascade)
+  emotionEntries       EmotionEntry[]       // Эмоции, связанные с этой мыслью
+  cognitiveDistortions CognitiveDistortion[] // Когнитивные искажения
+
+  @@index([cbtEntryId], name: "idx_thought_chains_cbt_entry")
+  @@index([cbtEntryId, orderIndex], name: "idx_thought_chains_order")
+  @@map("thought_chains")
+}
+
+// === ЗАПИСИ ЭМОЦИЙ (НОРМАЛИЗОВАННЫЕ) ===
+model EmotionEntry {
+  id             String   @id @default(uuid())
+  thoughtChainId String   @map("thought_chain_id")
+  emotionId      Int      @map("emotion_id")
+  intensity      Int      @default(5) @db.SmallInt // 1-10
+  durationMinutes Int?    @map("duration_minutes") // Продолжительность эмоции в минутах
+
+  // Метаданные
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Отношения
+  thoughtChain ThoughtChain @relation(fields: [thoughtChainId], references: [id], onDelete: Cascade)
+  emotion      Emotion      @relation(fields: [emotionId], references: [id], onDelete: Restrict)
+
+  @@index([thoughtChainId], name: "idx_emotion_entries_thought_chain")
+  @@index([emotionId], name: "idx_emotion_entries_emotion")
+  @@index([emotionId, intensity], name: "idx_emotion_entries_emotion_intensity")
+  @@index([createdAt], name: "idx_emotion_entries_created")
+  @@map("emotion_entries")
+}
+
+// === КОГНИТИВНЫЕ ИСКАЖЕНИЯ (НОРМАЛИЗОВАННЫЕ) ===
+model CognitiveDistortion {
+  id             String   @id @default(uuid())
+  thoughtChainId String   @map("thought_chain_id")
+  type           String   // Тип искажения (например, "catastrophizing", "black_and_white", etc.)
+  description    String?  // Описание конкретного искажения
+  intensity      Int      @default(5) @db.SmallInt // 1-10
+
+  // Метаданные
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Отношения
+  thoughtChain ThoughtChain @relation(fields: [thoughtChainId], references: [id], onDelete: Cascade)
+
+  @@index([thoughtChainId], name: "idx_cognitive_distortions_thought_chain")
+  @@index([type], name: "idx_cognitive_distortions_type")
+  @@map("cognitive_distortions")
 }
 
 // === ПЕРЕВОДЫ ===
