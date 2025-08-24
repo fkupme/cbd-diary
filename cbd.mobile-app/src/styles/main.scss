@@ -1,0 +1,675 @@
+// CBD Mood Diary - Design System
+// Основной файл стилей приложения
+
+// =====================================
+// Imports
+// =====================================
+@import './components.scss';
+
+// =====================================
+// CSS Variables (Custom Properties)
+// =====================================
+
+:root {
+	// ===== Основная палитра (современная, минималистичная) =====
+	--primary: #4a90e2;
+	--primary-hover: #357abd;
+	--primary-active: #2968a3;
+	--primary-light: #e3f2fd;
+	--primary-dark: #1e88e5;
+
+	--secondary: #7ed321;
+	--secondary-hover: #6bbf10;
+	--secondary-active: #5aa605;
+	--secondary-light: #f1f8e9;
+	--secondary-dark: #689f38;
+
+	// ===== Фоны и поверхности =====
+	--bg-primary: #ffffff;
+	--bg-secondary: #f8f9fb;
+	--bg-tertiary: #f3f4f6;
+	--bg-elevated: #ffffff;
+	--bg-overlay: rgba(0, 0, 0, 0.5);
+	--bg-hover: rgba(0, 0, 0, 0.04);
+	--bg-active: rgba(0, 0, 0, 0.08);
+
+	// ===== Границы =====
+	--border-color: #e5e7eb;
+	--border-color-hover: #d1d5db;
+	--border-color-focus: var(--primary);
+	--border-width: 1px;
+	--border-width-focus: 2px;
+
+	// ===== Текстовые цвета =====
+	--text-primary: #1f2937;
+	--text-secondary: #6b7280;
+	--text-tertiary: #9ca3af;
+	--text-disabled: #d1d5db;
+	--text-inverse: #ffffff;
+	--text-link: var(--primary);
+	--text-link-hover: var(--primary-hover);
+
+	// ===== Поля ввода =====
+	--input-bg: #ffffff;
+	--input-bg-hover: #fafafa;
+	--input-bg-focus: #ffffff;
+	--input-bg-disabled: #f3f4f6;
+	--input-border: #e5e7eb;
+	--input-border-hover: #9ca3af;
+	--input-border-focus: var(--primary);
+	--input-text: var(--text-primary);
+	--input-placeholder: #9ca3af;
+
+	// ===== Эмоциональная палитра (современная) =====
+	--emotion-joy: #ffd93d;
+	--emotion-joy-light: #fff5cc;
+	--emotion-joy-dark: #f9c74f;
+
+	--emotion-sadness: #6cb4ee;
+	--emotion-sadness-light: #e0f2fe;
+	--emotion-sadness-dark: #0ea5e9;
+
+	--emotion-anger: #ff6b6b;
+	--emotion-anger-light: #ffe5e5;
+	--emotion-anger-dark: #dc2626;
+
+	--emotion-fear: #c77dff;
+	--emotion-fear-light: #f3e8ff;
+	--emotion-fear-dark: #9333ea;
+
+	--emotion-shame: #ffb347;
+	--emotion-shame-light: #fff1e6;
+	--emotion-shame-dark: #f97316;
+
+	--emotion-surprise: #72ddf7;
+	--emotion-surprise-light: #e0f8ff;
+	--emotion-surprise-dark: #06b6d4;
+
+	// ===== Системные цвета =====
+	--success: #10b981;
+	--success-bg: #d1fae5;
+	--success-border: #6ee7b7;
+	--success-text: #065f46;
+
+	--warning: #f59e0b;
+	--warning-bg: #fef3c7;
+	--warning-border: #fcd34d;
+	--warning-text: #92400e;
+
+	--error: #ef4444;
+	--error-bg: #fee2e2;
+	--error-border: #fca5a5;
+	--error-text: #991b1b;
+
+	--info: #3b82f6;
+	--info-bg: #dbeafe;
+	--info-border: #93c5fd;
+	--info-text: #1e40af;
+
+	// ===== Шрифты =====
+	--font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+		system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Monaco', 'Cascadia Code', 'Consolas',
+		monospace;
+
+	// ===== Размеры шрифтов =====
+	--text-xs: 0.75rem; // 12px
+	--text-sm: 0.875rem; // 14px
+	--text-base: 1rem; // 16px
+	--text-lg: 1.125rem; // 18px
+	--text-xl: 1.25rem; // 20px
+	--text-2xl: 1.5rem; // 24px
+	--text-3xl: 1.875rem; // 30px
+	--text-4xl: 2.25rem; // 36px
+
+	// ===== Веса шрифтов =====
+	--font-normal: 400;
+	--font-medium: 500;
+	--font-semibold: 600;
+	--font-bold: 700;
+
+	// ===== Межстрочный интервал =====
+	--leading-tight: 1.25;
+	--leading-normal: 1.5;
+	--leading-relaxed: 1.625;
+
+	// ===== Отступы (8px сетка) =====
+	--space-0: 0;
+	--space-1: 0.25rem; // 4px
+	--space-2: 0.5rem; // 8px
+	--space-3: 0.75rem; // 12px
+	--space-4: 1rem; // 16px
+	--space-5: 1.25rem; // 20px
+	--space-6: 1.5rem; // 24px
+	--space-8: 2rem; // 32px
+	--space-10: 2.5rem; // 40px
+	--space-12: 3rem; // 48px
+	--space-16: 4rem; // 64px
+
+	// ===== Радиусы =====
+	--radius-none: 0;
+	--radius-sm: 0.375rem; // 6px
+	--radius-base: 0.5rem; // 8px
+	--radius-md: 0.625rem; // 10px
+	--radius-lg: 0.75rem; // 12px
+	--radius-xl: 1rem; // 16px
+	--radius-2xl: 1.5rem; // 24px
+	--radius-full: 9999px;
+
+	// ===== Тени (современные, мягкие) =====
+	--shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+	--shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+	--shadow-base: 0 4px 6px -1px rgb(0 0 0 / 0.1),
+		0 2px 4px -2px rgb(0 0 0 / 0.1);
+	--shadow-md: 0 10px 15px -3px rgb(0 0 0 / 0.1),
+		0 4px 6px -4px rgb(0 0 0 / 0.1);
+	--shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.1),
+		0 8px 10px -6px rgb(0 0 0 / 0.1);
+	--shadow-xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+	--shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+
+	// ===== Анимации =====
+	--transition-fast: 150ms;
+	--transition-base: 200ms;
+	--transition-slow: 300ms;
+	--ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+	--ease-out: cubic-bezier(0, 0, 0.2, 1);
+	--ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+// ===== Темная тема =====
+:root.dark {
+	// ===== Основная палитра =====
+	--primary: #60a5fa;
+	--primary-hover: #93bbfc;
+	--primary-active: #3b82f6;
+	--primary-light: #1e3a8a;
+	--primary-dark: #2563eb;
+
+	--secondary: #86efac;
+	--secondary-hover: #bbf7d0;
+	--secondary-active: #4ade80;
+	--secondary-light: #14532d;
+	--secondary-dark: #22c55e;
+
+	// ===== Фоны и поверхности =====
+	--bg-primary: #0f0f0f;
+	--bg-secondary: #1a1a1a;
+	--bg-tertiary: #262626;
+	--bg-elevated: #1f1f1f;
+	--bg-overlay: rgba(0, 0, 0, 0.7);
+	--bg-hover: rgba(255, 255, 255, 0.08);
+	--bg-active: rgba(255, 255, 255, 0.12);
+
+	// ===== Границы =====
+	--border-color: #333333;
+	--border-color-hover: #4b4b4b;
+	--border-color-focus: var(--primary);
+
+	// ===== Текстовые цвета =====
+	--text-primary: #f3f4f6;
+	--text-secondary: #9ca3af;
+	--text-tertiary: #6b7280;
+	--text-disabled: #4b5563;
+	--text-inverse: #1f2937;
+	--text-link: var(--primary);
+	--text-link-hover: var(--primary-hover);
+
+	// ===== Поля ввода =====
+	--input-bg: #1a1a1a;
+	--input-bg-hover: #262626;
+	--input-bg-focus: #1a1a1a;
+	--input-bg-disabled: #0f0f0f;
+	--input-border: #333333;
+	--input-border-hover: #4b4b4b;
+	--input-border-focus: var(--primary);
+	--input-text: var(--text-primary);
+	--input-placeholder: #6b7280;
+
+	// ===== Эмоциональная палитра (адаптированная для темной темы) =====
+	--emotion-joy: #fcd34d;
+	--emotion-joy-light: #451a03;
+	--emotion-joy-dark: #fbbf24;
+
+	--emotion-sadness: #60a5fa;
+	--emotion-sadness-light: #1e3a8a;
+	--emotion-sadness-dark: #3b82f6;
+
+	--emotion-anger: #f87171;
+	--emotion-anger-light: #7f1d1d;
+	--emotion-anger-dark: #ef4444;
+
+	--emotion-fear: #a78bfa;
+	--emotion-fear-light: #4c1d95;
+	--emotion-fear-dark: #8b5cf6;
+
+	--emotion-shame: #fb923c;
+	--emotion-shame-light: #7c2d12;
+	--emotion-shame-dark: #f97316;
+
+	--emotion-surprise: #67e8f9;
+	--emotion-surprise-light: #164e63;
+	--emotion-surprise-dark: #22d3ee;
+
+	// ===== Системные цвета =====
+	--success: #4ade80;
+	--success-bg: #14532d;
+	--success-border: #16a34a;
+	--success-text: #bbf7d0;
+
+	--warning: #fbbf24;
+	--warning-bg: #451a03;
+	--warning-border: #d97706;
+	--warning-text: #fef3c7;
+
+	--error: #f87171;
+	--error-bg: #7f1d1d;
+	--error-border: #dc2626;
+	--error-text: #fee2e2;
+
+	--info: #60a5fa;
+	--info-bg: #1e3a8a;
+	--info-border: #2563eb;
+	--info-text: #dbeafe;
+
+	// ===== Тени (для темной темы) =====
+	--shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+	--shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+	--shadow-base: 0 4px 6px -1px rgb(0 0 0 / 0.4),
+		0 2px 4px -2px rgb(0 0 0 / 0.3);
+	--shadow-md: 0 10px 15px -3px rgb(0 0 0 / 0.4),
+		0 4px 6px -4px rgb(0 0 0 / 0.3);
+	--shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.4),
+		0 8px 10px -6px rgb(0 0 0 / 0.3);
+	--shadow-xl: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+	--shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.3);
+}
+
+// =====================================
+// Старые переменные для обратной совместимости
+// =====================================
+
+:root {
+	// Маппинг старых переменных на новые
+	--primary-blue: var(--primary);
+	--primary-green: var(--secondary);
+	--neutral-white: var(--bg-primary);
+	--neutral-lightest: var(--bg-secondary);
+	--neutral-light: var(--border-color);
+	--neutral-medium: var(--text-secondary);
+	--neutral-dark: var(--text-primary);
+
+	--text-h1: var(--text-3xl);
+	--text-h2: var(--text-2xl);
+	--text-h3: var(--text-xl);
+	--text-h4: var(--text-lg);
+	--text-body: var(--text-base);
+	--text-small: var(--text-sm);
+	--text-caption: var(--text-xs);
+
+	--weight-regular: var(--font-normal);
+	--weight-medium: var(--font-medium);
+	--weight-semibold: var(--font-semibold);
+	--weight-bold: var(--font-bold);
+
+	--line-height-tight: var(--leading-tight);
+	--line-height-normal: var(--leading-normal);
+	--line-height-relaxed: var(--leading-relaxed);
+
+	--space-xs: var(--space-1);
+	--space-sm: var(--space-2);
+	--space-md: var(--space-3);
+	--space-lg: var(--space-4);
+	--space-xl: var(--space-6);
+	--space-2xl: var(--space-8);
+	--space-3xl: var(--space-12);
+
+	--radius-sm: var(--radius-sm);
+	--radius-md: var(--radius-base);
+	--radius-lg: var(--radius-lg);
+	--radius-xl: var(--radius-xl);
+	--radius-full: var(--radius-full);
+
+	--shadow-sm: var(--shadow-sm);
+	--shadow-md: var(--shadow-base);
+	--shadow-lg: var(--shadow-lg);
+	--shadow-xl: var(--shadow-xl);
+
+	--success-color: var(--success);
+	--warning-color: var(--warning);
+	--error-color: var(--error);
+	--info-color: var(--info);
+
+	--font-secondary: var(--font-primary);
+}
+
+// =====================================
+// Utility Classes
+// =====================================
+
+// ===== Типография =====
+.screen-title {
+	font-family: var(--font-primary);
+	font-size: var(--text-h1);
+	font-weight: var(--weight-bold);
+	line-height: var(--line-height-tight);
+	color: var(--text-primary);
+}
+
+.section-title {
+	font-family: var(--font-primary);
+	font-size: var(--text-h2);
+	font-weight: var(--weight-semibold);
+	line-height: var(--line-height-tight);
+	color: var(--text-primary);
+}
+
+.body-text {
+	font-family: var(--font-secondary);
+	font-size: var(--text-body);
+	font-weight: var(--weight-regular);
+	line-height: var(--line-height-normal);
+	color: var(--text-primary);
+}
+
+.caption-text {
+	font-family: var(--font-secondary);
+	font-size: var(--text-caption);
+	font-weight: var(--weight-regular);
+	line-height: var(--line-height-normal);
+	color: var(--text-secondary);
+}
+
+// ===== Кнопки =====
+.btn-primary {
+	background: var(--primary-blue);
+	color: white;
+	border: none;
+	border-radius: var(--radius-md);
+	padding: var(--space-sm) var(--space-md);
+	font-weight: var(--weight-medium);
+	transition: all 0.2s ease;
+
+	&:hover {
+		filter: brightness(1.1);
+		transform: translateY(-1px);
+	}
+}
+
+.btn-success {
+	background: var(--primary-green);
+	color: white;
+	border: none;
+	border-radius: var(--radius-md);
+	padding: var(--space-sm) var(--space-md);
+	font-weight: var(--weight-medium);
+	transition: all 0.2s ease;
+
+	&:hover {
+		filter: brightness(1.1);
+		transform: translateY(-1px);
+	}
+}
+
+.btn-ghost {
+	background: transparent;
+	color: var(--primary-blue);
+	border: 1px solid var(--primary-blue);
+	border-radius: var(--radius-md);
+	padding: var(--space-sm) var(--space-md);
+	font-weight: var(--weight-medium);
+	transition: all 0.2s ease;
+
+	&:hover {
+		background: var(--primary-blue);
+		color: white;
+	}
+}
+
+// ===== Карточки =====
+.card {
+	background: var(--neutral-white);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow-md);
+	padding: var(--space-md);
+	margin-bottom: var(--space-md);
+}
+
+// ===== Эмоциональные карточки =====
+.emotion-joy {
+	background: linear-gradient(
+		135deg,
+		var(--emotion-joy-primary),
+		var(--emotion-joy-secondary)
+	);
+	color: white;
+	border-radius: var(--radius-lg);
+	padding: var(--space-md);
+	text-align: center;
+	box-shadow: var(--shadow-md);
+}
+
+.emotion-sadness {
+	background: linear-gradient(
+		135deg,
+		var(--emotion-sadness-primary),
+		var(--emotion-sadness-secondary)
+	);
+	color: white;
+	border-radius: var(--radius-lg);
+	padding: var(--space-md);
+	text-align: center;
+	box-shadow: var(--shadow-md);
+}
+
+.emotion-anger {
+	background: linear-gradient(
+		135deg,
+		var(--emotion-anger-primary),
+		var(--emotion-anger-secondary)
+	);
+	color: white;
+	border-radius: var(--radius-lg);
+	padding: var(--space-md);
+	text-align: center;
+	box-shadow: var(--shadow-md);
+}
+
+.emotion-fear {
+	background: linear-gradient(
+		135deg,
+		var(--emotion-fear-primary),
+		var(--emotion-fear-secondary)
+	);
+	color: white;
+	border-radius: var(--radius-lg);
+	padding: var(--space-md);
+	text-align: center;
+	box-shadow: var(--shadow-md);
+}
+
+.emotion-shame {
+	background: linear-gradient(
+		135deg,
+		var(--emotion-shame-primary),
+		var(--emotion-shame-secondary)
+	);
+	color: white;
+	border-radius: var(--radius-lg);
+	padding: var(--space-md);
+	text-align: center;
+	box-shadow: var(--shadow-md);
+}
+
+.emotion-surprise {
+	background: linear-gradient(
+		135deg,
+		var(--emotion-surprise-primary),
+		var(--emotion-surprise-secondary)
+	);
+	color: white;
+	border-radius: var(--radius-lg);
+	padding: var(--space-md);
+	text-align: center;
+	box-shadow: var(--shadow-md);
+}
+
+// ===== Инпуты =====
+.input-field {
+	background: var(--neutral-lightest);
+	border: 1px solid var(--neutral-light);
+	color: var(--text-primary);
+	border-radius: var(--radius-md);
+	padding: var(--space-sm) var(--space-md);
+	font-family: var(--font-secondary);
+	font-size: var(--text-body);
+	transition: all 0.2s ease;
+
+	&:focus {
+		border-color: var(--primary-blue);
+		box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+		outline: none;
+	}
+}
+
+// ===== Spacing utilities =====
+.m-xs {
+	margin: var(--space-xs);
+}
+.m-sm {
+	margin: var(--space-sm);
+}
+.m-md {
+	margin: var(--space-md);
+}
+.m-lg {
+	margin: var(--space-lg);
+}
+.m-xl {
+	margin: var(--space-xl);
+}
+
+.p-xs {
+	padding: var(--space-xs);
+}
+.p-sm {
+	padding: var(--space-sm);
+}
+.p-md {
+	padding: var(--space-md);
+}
+.p-lg {
+	padding: var(--space-lg);
+}
+.p-xl {
+	padding: var(--space-xl);
+}
+
+.mt-xs {
+	margin-top: var(--space-xs);
+}
+.mt-sm {
+	margin-top: var(--space-sm);
+}
+.mt-md {
+	margin-top: var(--space-md);
+}
+.mt-lg {
+	margin-top: var(--space-lg);
+}
+.mt-xl {
+	margin-top: var(--space-xl);
+}
+
+.mb-xs {
+	margin-bottom: var(--space-xs);
+}
+.mb-sm {
+	margin-bottom: var(--space-sm);
+}
+.mb-md {
+	margin-bottom: var(--space-md);
+}
+.mb-lg {
+	margin-bottom: var(--space-lg);
+}
+.mb-xl {
+	margin-bottom: var(--space-xl);
+}
+
+// ===== Анимации =====
+.fade-enter-active,
+.fade-leave-active {
+	transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+	opacity: 0;
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+	transition: all 0.3s ease;
+}
+
+.slide-up-enter-from {
+	transform: translateY(100%);
+	opacity: 0;
+}
+
+.slide-up-leave-to {
+	transform: translateY(100%);
+	opacity: 0;
+}
+
+// ===== Базовые стили =====
+* {
+	box-sizing: border-box;
+}
+
+body {
+	font-family: var(--font-secondary);
+	font-size: var(--text-body);
+	line-height: var(--line-height-normal);
+	color: var(--text-primary);
+	background-color: var(--neutral-white);
+	margin: 0;
+	padding: 0;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+// ===== Responsive =====
+@media (max-width: 768px) {
+	.screen-title {
+		font-size: var(--text-h2);
+	}
+
+	.section-title {
+		font-size: var(--text-h3);
+	}
+}
+
+// Отключение агрессивных hover-эффектов на тач-устройствах
+@media (hover: none) and (pointer: coarse) {
+	.q-btn:hover,
+	button:hover,
+	.action-card:hover,
+	.entry-card:hover,
+	.profile-btn:hover,
+	.see-all-btn:hover,
+	.add-emotion-btn:hover,
+	.add-thought-btn:hover,
+	.expand-btn:hover,
+	.ai-chat-btn:hover {
+		transform: none !important;
+		box-shadow: none !important;
+		background: inherit !important;
+	}
+
+	// Убираем изменение gap у кнопок с hover
+	.see-all-btn:hover {
+		gap: var(--space-1) !important;
+	}
+}

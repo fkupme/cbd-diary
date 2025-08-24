@@ -1,0 +1,312 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// === ПОЛЬЗОВАТЕЛИ ===
+model User {
+  id                  String               @id @default(uuid())
+  email               String               @unique
+  password            String // Хешированный пароль
+  name                String?
+  age                 Int?                 @db.SmallInt
+  gender              Gender?
+  preferredLanguage   String               @default("ru") @map("preferred_language")
+  goals               Json                 @default("[]") // JSON массив строк
+  experienceLevel     ExperienceLevel?     @map("experience_level")
+  meditationFrequency MeditationFrequency? @map("meditation_frequency")
+  stressLevel         Int?                 @db.SmallInt // 1-10
+  sleepQuality        Int?                 @db.SmallInt // 1-10
+  timezone            String               @default("UTC")
+  dateOfBirth         DateTime?            @map("date_of_birth")
+
+  // Настройки уведомлений
+  pushEnabled         Boolean              @default(true) @map("push_enabled")
+
+  // Синхронизация
+  isSynced   Boolean   @default(false) @map("is_synced")
+  lastSyncAt DateTime? @map("last_sync_at")
+
+  // Временные метки
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Отношения
+  cbtEntries     CbtEntry[]
+  syncOperations SyncOperation[]
+  userStats      UserStats?
+  chats          Chat[]
+  devicePushTokens DevicePushToken[]
+  userBeliefs   UserBelief[]
+
+  @@map("users")
+}
+
+// === КАТЕГОРИИ ЭМОЦИЙ ===
+model EmotionCategory {
+  id        Int      @id @default(autoincrement())
+  nameKey   String   @map("name_key") // emotion_category.anger
+  color     String // hex цвет
+  icon      String?
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Отношения
+  emotions Emotion[]
+
+  @@map("emotion_categories")
+}
+
+// === ЭМОЦИИ ===
+model Emotion {
+  id                Int      @id @default(autoincrement())
+  categoryId        Int      @map("category_id")
+  nameKey           String   @unique @map("name_key") // emotion.anger.rage
+  emoji             String
+  intensityDefault  Int      @default(5) @map("intensity_default") @db.SmallInt // 1-10
+  synonyms          Json     @default("[]") // JSON массив строк
+  oppositeEmotionId Int?     @map("opposite_emotion_id")
+  sortOrder         Int      @default(0) @map("sort_order")
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Отношения
+  category         EmotionCategory @relation(fields: [categoryId], references: [id])
+  oppositeEmotion  Emotion?        @relation("EmotionOpposite", fields: [oppositeEmotionId], references: [id])
+  oppositeEmotions Emotion[]       @relation("EmotionOpposite")
+
+  @@map("emotions")
+}
+
+// === ЗАПИСИ ДНЕВНИКА (КПТ) ===
+model CbtEntry {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  entryDate DateTime @map("entry_date")
+
+  // СМЭР модель
+  situation String
+  thoughts  Json   @default("[]") // JSON массив ThoughtChain
+  reactions String
+
+  // Метаданные настроения
+  moodScoreBefore      Int? @map("mood_score_before") @db.SmallInt // 1-10
+  moodScoreAfter       Int? @map("mood_score_after") @db.SmallInt // 1-10
+  entryDurationMinutes Int? @map("entry_duration_minutes")
+  tags                 Json @default("[]") // JSON массив строк
+
+  // ИИ анализ
+  aiAnalysis Json? @map("ai_analysis") // JSON объект AIAnalysis
+
+  // Синхронизация
+  isSynced           Boolean @default(false) @map("is_synced")
+  serverId           String? @map("server_id") // UUID на сервере
+  conflictResolution Json?   @map("conflict_resolution") // JSON для разрешения конфликтов
+
+  // Временные метки
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Отношения
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat Chat?
+
+  @@index([userId, entryDate(sort: Desc)], name: "idx_cbt_entries_user_date")
+  @@index([entryDate], name: "idx_cbt_entries_entry_date")
+  @@index([isSynced], name: "idx_cbt_entries_is_synced")
+  @@index([serverId], name: "idx_cbt_entries_server_id")
+  @@map("cbt_entries")
+}
+
+// === ПЕРЕВОДЫ ===
+model Translation {
+  id               Int      @id @default(autoincrement())
+  languageCode     String   @map("language_code")
+  translationKey   String   @map("translation_key")
+  translationValue String   @map("translation_value")
+  context          String?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@unique([languageCode, translationKey], name: "unique_translation")
+  @@index([languageCode], name: "idx_translations_language")
+  @@index([translationKey], name: "idx_translations_key")
+  @@map("translations")
+}
+
+// === ОПЕРАЦИИ СИНХРОНИЗАЦИИ ===
+model SyncOperation {
+  id            String        @id @default(uuid())
+  userId        String        @map("user_id")
+  operationType OperationType @map("operation_type")
+  tableName     String        @map("table_name")
+  recordId      String        @map("record_id")
+  dataSnapshot  Json          @map("data_snapshot") // JSON снапшот данных
+  createdAt     DateTime      @default(now()) @map("created_at")
+  syncedAt      DateTime?     @map("synced_at")
+  retryCount    Int           @default(0) @map("retry_count")
+  lastError     String?       @map("last_error")
+
+  // Отношения
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], name: "idx_sync_operations_user_id")
+  @@index([syncedAt], name: "idx_sync_operations_synced_at")
+  @@index([tableName, recordId], name: "idx_sync_operations_table_record")
+  @@map("sync_operations")
+}
+
+// === СТАТИСТИКА ПОЛЬЗОВАТЕЛЕЙ ===
+model UserStats {
+  userId              String   @id @map("user_id")
+  totalEntries        Int      @default(0) @map("total_entries")
+  currentStreakDays   Int      @default(0) @map("current_streak_days")
+  longestStreakDays   Int      @default(0) @map("longest_streak_days")
+  avgMoodScore        Float    @default(0.0) @map("avg_mood_score")
+  mostCommonEmotionId Int?     @map("most_common_emotion_id")
+  entriesThisWeek     Int      @default(0) @map("entries_this_week")
+  entriesThisMonth    Int      @default(0) @map("entries_this_month")
+  lastCalculatedAt    DateTime @map("last_calculated_at")
+
+  // Отношения
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_stats")
+}
+
+// === ЕНУМЫ ===
+enum Gender {
+  MALE              @map("male")
+  FEMALE            @map("female")
+  OTHER             @map("other")
+  PREFER_NOT_TO_SAY @map("prefer_not_to_say")
+}
+
+enum ExperienceLevel {
+  BEGINNER     @map("beginner")
+  INTERMEDIATE @map("intermediate")
+  ADVANCED     @map("advanced")
+}
+
+enum MeditationFrequency {
+  NEVER     @map("never")
+  RARELY    @map("rarely")
+  SOMETIMES @map("sometimes")
+  OFTEN     @map("often")
+  DAILY     @map("daily")
+}
+
+enum OperationType {
+  INSERT @map("INSERT")
+  UPDATE @map("UPDATE")
+  DELETE @map("DELETE")
+}
+
+model Chat {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  cbtEntryId String   @unique @map("cbt_entry_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Финализация сессии
+  finalized  Boolean  @default(false)
+  endedAt    DateTime?
+  endReason  String?
+  outcome    String?  // agreed | partially_agreed | not_agreed
+  summary    Json?
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cbtEntry CbtEntry      @relation(fields: [cbtEntryId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+  finalization ChatFinalization?
+
+  @@index([userId], name: "idx_chats_user_id")
+  @@index([finalized, endedAt], name: "idx_chats_finalized_end")
+  @@map("chats")
+}
+
+enum ChatMessageRole {
+  USER
+  AI
+  SYSTEM
+}
+
+model ChatMessage {
+  id        String          @id @default(uuid())
+  chatId    String          @map("chat_id")
+  role      ChatMessageRole
+  content   String
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt], name: "idx_chat_messages_chat_created")
+  @@map("chat_messages")
+}
+
+// === ФИНАЛИЗАЦИЯ СЕССИИ ЧАТА ===
+model ChatFinalization {
+  id        String   @id @default(uuid())
+  chatId    String   @unique @map("chat_id")
+  outcome   String?
+  endReason String?
+  endedAt   DateTime?
+  summary   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@map("chat_finalizations")
+}
+
+// === УБЕЖДЕНИЯ ПОЛЬЗОВАТЕЛЯ ===
+model UserBelief {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  text             String
+  occurrencesCount Int      @default(1) @map("occurrences_count")
+  confidenceAvg    Float    @default(0)
+  firstSeenAt      DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt       DateTime @default(now()) @map("last_seen_at")
+  sources          Json     @default("[]")
+  status           String   @default("active")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, lastSeenAt], name: "idx_user_belief_user_last")
+  @@map("user_beliefs")
+}
+
+// === PUSH УСТРОЙСТВА ===
+enum PushPlatform {
+  ANDROID
+  IOS
+}
+
+model DevicePushToken {
+  id          String       @id @default(uuid())
+  userId      String?      @map("user_id")
+  token       String       @unique
+  platform    PushPlatform
+  deviceId    String?      @map("device_id")
+  enabled     Boolean      @default(true)
+  lastSeenAt  DateTime?    @map("last_seen_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId], name: "idx_device_push_token_user")
+  @@map("device_push_tokens")
+}
