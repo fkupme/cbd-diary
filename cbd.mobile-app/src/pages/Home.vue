@@ -1,226 +1,129 @@
 <template>
-	<div class="home-page">
-		<div class="home-container">
-			<!-- Header -->
-			<div class="home-header">
-				<div class="greeting">
-					<h1 class="greeting-title">{{ greeting }}</h1>
-					<p class="greeting-subtitle">{{ currentDate }}</p>
+	<div class="home diary-theme">
+		<div class="home-inner">
+			<!-- Шапка: дата прописью + приветствие + аватар -->
+			<header class="home-head">
+				<div class="home-head-text">
+					<p class="diary-date">{{ longDate }}</p>
+					<h1 class="home-greet">
+						{{ greetingWord }}<template v-if="firstName">, {{ firstName }}</template>
+					</h1>
 				</div>
-				<q-btn
-					class="profile-btn"
-					@click="goToProfile"
-					round
-					flat
-					icon="account_circle"
-				/>
-			</div>
+				<button class="avatar-btn" @click="goToProfile" aria-label="Профиль">
+					{{ initial }}
+				</button>
+			</header>
 
-			<!-- Hero Section -->
-			<div class="hero-section">
-				<div class="hero-card">
-					<div class="hero-content">
-						<h2 class="hero-title">
-							{{
-								t("home.heroTitle", "Начните отслеживать свои мысли и эмоции")
-							}}
-						</h2>
-						<p class="hero-description">
-							{{
-								t(
-									"home.heroDescription",
-									"Используйте методы КПТ для лучшего понимания себя"
-								)
-							}}
-						</p>
-					</div>
-					<CbdButton
-						variant="primary"
-						size="lg"
-						icon="add"
-						class="hero-cta"
-						@click="$router.push('/add-entry')"
-					>
-						{{ t("home.addEntry", "Новая запись") }}
-					</CbdButton>
-				</div>
-			</div>
-
-			<!-- Statistics Overview -->
-			<div class="stats-overview" v-if="hasEntries">
-				<h2 class="section-title">
-					{{ t("home.yourStatistics", "Ваша статистика") }}
+			<!-- Голосовой захват события — главный сценарий -->
+			<section class="capture">
+				<button class="capture-orb" @click="openCapture" aria-label="Рассказать, что произошло">
+					<span class="orb-ring"></span>
+					<span class="orb-ring orb-ring-2"></span>
+					<svg class="orb-mic" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+						<path
+							d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Z"
+							fill="currentColor"
+						/>
+						<path
+							d="M19 11a7 7 0 0 1-14 0M12 18v3"
+							stroke="currentColor"
+							stroke-width="1.6"
+							stroke-linecap="round"
+						/>
+					</svg>
+				</button>
+				<h2 class="capture-title">
+					{{ t("home.capture.title", "Расскажите, что произошло") }}
 				</h2>
-				<div class="stats-grid">
-					<div class="stat-card">
-						<div class="stat-icon">
-							<q-icon name="book" />
-						</div>
-						<div class="stat-content">
-							<div class="stat-value">{{ totalEntries }}</div>
-							<div class="stat-label">
-								{{ t("home.totalEntries", "Всего записей") }}
-							</div>
-						</div>
-					</div>
+				<p class="capture-sub">
+					{{
+						t(
+							"home.capture.sub",
+							"Опишите ситуацию словами — я разложу её на мысли, эмоции и реакции"
+						)
+					}}
+				</p>
+				<button class="text-link capture-manual" @click="manualEntry">
+					{{ t("home.capture.manual", "или записать текстом") }}
+				</button>
+			</section>
 
-					<div class="stat-card">
-						<div class="stat-icon">
-							<q-icon name="calendar_today" />
-						</div>
-						<div class="stat-content">
-							<div class="stat-value">{{ currentStreak }}</div>
-							<div class="stat-label">
-								{{ t("home.daysInRow", "Дней подряд") }}
-							</div>
-						</div>
-					</div>
+			<!-- Тихая строка состояния дневника -->
+			<p class="diary-stat" v-if="hasEntries">
+				<span class="diary-stat-strong">{{ totalEntries }}</span>
+				{{ pluralize(totalEntries, ["запись", "записи", "записей"]) }}
+				<template v-if="currentStreak > 1">
+					· <span class="diary-stat-strong">{{ currentStreak }}</span>
+					{{ pluralize(currentStreak, ["день", "дня", "дней"]) }} подряд
+				</template>
+			</p>
 
-					<div class="stat-card">
-						<div class="stat-icon">
-							<q-icon name="trending_up" />
-						</div>
-						<div class="stat-content">
-							<div class="stat-value">{{ weeklyProgress }}%</div>
-							<div class="stat-label">
-								{{ t("home.weekProgress", "Прогресс недели") }}
-							</div>
-						</div>
-					</div>
-
-					<div class="stat-card">
-						<div class="stat-icon">
-							<q-icon name="psychology" />
-						</div>
-						<div class="stat-content">
-							<div class="stat-value">{{ mostFrequentEmotion }}</div>
-							<div class="stat-label">
-								{{ t("home.frequentEmotion", "Частая эмоция") }}
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			<!-- Recent Entries -->
-			<div class="recent-entries" v-if="recentEntries.length > 0">
-				<div class="section-header">
-					<h2 class="section-title">
-						{{ t("home.recentEntries", "Последние записи") }}
-					</h2>
-					<q-btn
-						class="see-all-btn"
-						flat
-						@click="$router.push('/diary')"
-						icon-right="arrow_forward"
-					>
-						{{ t("home.seeAll", "Все записи") }}
-					</q-btn>
+			<!-- Последние страницы дневника -->
+			<section class="pages" v-if="recentEntries.length > 0">
+				<div class="pages-head">
+					<h3 class="pages-title">
+						{{ t("home.recentEntries", "Последние страницы") }}
+					</h3>
+					<button class="text-link" @click="router.push('/diary')">
+						{{ t("home.seeAll", "все") }} →
+					</button>
 				</div>
 
-				<div class="entries-preview">
-					<div
+				<ul class="pages-list">
+					<li
 						v-for="entry in recentEntries"
 						:key="entry.id"
-						class="entry-preview-card"
-						@click="$router.push(`/diary?entry=${entry.id}`)"
+						class="page-card"
+						@click="router.push(`/diary?entry=${entry.id}`)"
 					>
-						<div class="entry-preview-header">
-							<div class="entry-preview-time">
-								{{ formatTime(entry.createdAt) }}
-							</div>
-							<div class="entry-preview-emotions">
+						<div class="page-card-top">
+							<span class="page-time">{{ formatTime(entry.createdAt) }}</span>
+							<div class="page-emotions">
 								<span
 									v-for="emotion in getEntryEmotions(entry).slice(0, 3)"
 									:key="emotion.id"
-									class="emotion-badge"
-									:style="{ background: getEmotionColor(emotion.id) }"
+									class="ink-tag"
 								>
+									<i
+										class="ink-dot"
+										:style="{ background: getEmotionColor(emotion.id) }"
+									></i>
 									{{ emotion.name }}
 								</span>
 							</div>
 						</div>
-						<p class="entry-preview-text">{{ getEntryPreview(entry) }}</p>
-					</div>
-				</div>
-			</div>
+						<p class="page-text">{{ getEntryPreview(entry) }}</p>
+					</li>
+				</ul>
+			</section>
 
-			<!-- Quick Actions -->
-			<div class="quick-actions">
-				<h2 class="section-title">
-					{{ t("home.quickActions", "Быстрые действия") }}
-				</h2>
-				<div class="actions-grid">
-					<q-card
-						class="action-card"
-						clickable
-						@click="$router.push('/analytics')"
-					>
-						<div class="action-icon-wrapper analytics">
-							<q-icon name="analytics" />
-						</div>
-						<span class="action-label">{{
-							t("home.actions.analytics", "Аналитика")
-						}}</span>
-						<p class="action-description">
-							{{ t("home.actions.analyticsDesc", "Изучите паттерны эмоций") }}
-						</p>
-					</q-card>
+			<!-- Пустой дневник -->
+			<section class="empty" v-else>
+				<p class="empty-line">
+					{{ t("home.empty.line", "Дневник пока пуст") }}
+				</p>
+				<p class="empty-sub">
+					{{
+						t(
+							"home.empty.sub",
+							"Первая запись — самая важная. Расскажите про момент, который сегодня зацепил."
+						)
+					}}
+				</p>
+			</section>
 
-					<q-card class="action-card" clickable @click="startBreathingExercise">
-						<div class="action-icon-wrapper breathing">
-							<q-icon name="air" />
-						</div>
-						<span class="action-label">{{
-							t("home.actions.breathing", "Дыхание")
-						}}</span>
-						<p class="action-description">
-							{{ t("home.actions.breathingDesc", "Упражнение 4-7-8") }}
-						</p>
-					</q-card>
+			<!-- Мысль на вечер -->
+			<p class="diary-thought" v-if="dailyTip">{{ dailyTip }}</p>
 
-					<q-card
-						class="action-card"
-						clickable
-						@click="$router.push('/resources')"
-					>
-						<div class="action-icon-wrapper resources">
-							<q-icon name="school" />
-						</div>
-						<span class="action-label">{{
-							t("home.actions.resources", "Обучение")
-						}}</span>
-						<p class="action-description">
-							{{ t("home.actions.resourcesDesc", "Методы КПТ") }}
-						</p>
-					</q-card>
-
-					<q-card
-						class="action-card"
-						clickable
-						@click="$router.push('/settings')"
-					>
-						<div class="action-icon-wrapper settings">
-							<q-icon name="settings" />
-						</div>
-						<span class="action-label">{{
-							t("home.actions.settings", "Настройки")
-						}}</span>
-						<p class="action-description">
-							{{ t("home.actions.settingsDesc", "Персонализация") }}
-						</p>
-					</q-card>
-				</div>
-			</div>
-
-			<!-- Daily Tip -->
-			<div class="daily-tip" v-if="dailyTip">
-				<div class="tip-icon">💡</div>
-				<div class="tip-content">
-					<h3 class="tip-title">{{ t("home.dailyTip", "Совет дня") }}</h3>
-					<p class="tip-text">{{ dailyTip }}</p>
-				</div>
-			</div>
+			<!-- Дисклеймер -->
+			<p class="home-disclaimer">
+				{{
+					t(
+						"home.disclaimer",
+						"Приложение не заменяет психотерапевта. В кризисной ситуации звоните 112."
+					)
+				}}
+			</p>
 		</div>
 	</div>
 </template>
@@ -228,219 +131,152 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { CbdButton } from "../components/ui";
 import { useLocalization } from "../composables/useLocalization";
 import { useCBTStore } from "../stores/cbt";
 import { useEmotionsStore } from "../stores/emotions";
+import { useUserStore } from "../stores/user";
 
 const router = useRouter();
 const cbtStore = useCBTStore();
 const emotionsStore = useEmotionsStore();
+const userStore = useUserStore();
 const { t } = useLocalization();
 
-// Реактивные данные
-const currentDate = ref("");
-const greeting = ref("");
+const now = ref(new Date());
 
-// Computed свойства
-const hasEntries = computed(() => cbtStore.entries.length > 0);
-const totalEntries = computed(() => cbtStore.entries.length);
-const currentStreak = computed(() => calculateStreak());
-const weeklyProgress = computed(() => calculateWeeklyProgress());
-const mostFrequentEmotion = computed(() => getMostFrequentEmotion());
-const recentEntries = computed(() => cbtStore.entries.slice(0, 3));
-
-const dailyTips = [
-	t(
-		"home.tips.1",
-		"Записывайте мысли сразу, как только заметили сильную эмоцию"
-	) as string,
-	t(
-		"home.tips.2",
-		"Попробуйте технику 'остановка мысли' при навязчивых размышлениях"
-	) as string,
-	t(
-		"home.tips.3",
-		"Каждая эмоция имеет право на существование, важно как мы на неё реагируем"
-	) as string,
-	t(
-		"home.tips.4",
-		"Ведение дневника помогает выявить паттерны мышления"
-	) as string,
-	t("home.tips.5", "Не забывайте отмечать и позитивные моменты дня") as string,
-];
-
-const dailyTip = computed(() => {
-	const dayIndex = new Date().getDay();
-	return dailyTips[dayIndex % dailyTips.length];
+// ===== Шапка =====
+const greetingWord = computed(() => {
+	const hour = now.value.getHours();
+	if (hour < 6) return String(t("common.night", "Доброй ночи"));
+	if (hour < 12) return String(t("common.morning", "Доброе утро"));
+	if (hour < 18) return String(t("common.afternoon", "Добрый день"));
+	return String(t("common.evening", "Добрый вечер"));
 });
 
-// Методы
-function updateDateTime() {
-	const now = new Date();
-	const hour = now.getHours();
-
-	// Приветствие в зависимости от времени
-	if (hour < 6) greeting.value = String(t("common.night", "Доброй ночи"));
-	else if (hour < 12)
-		greeting.value = String(t("common.morning", "Доброе утро"));
-	else if (hour < 18)
-		greeting.value = String(t("common.afternoon", "Добрый день"));
-	else greeting.value = String(t("common.evening", "Добрый вечер"));
-
-	// Форматирование даты
-	currentDate.value = now.toLocaleDateString("ru-RU", {
+const longDate = computed(() =>
+	now.value.toLocaleDateString("ru-RU", {
 		weekday: "long",
 		day: "numeric",
 		month: "long",
-	});
+	})
+);
+
+const firstName = computed(() => {
+	const u = userStore.user as any;
+	const full = u?.name || u?.username || "";
+	return String(full).trim().split(/\s+/)[0] || "";
+});
+
+const initial = computed(() => {
+	const f = firstName.value;
+	const u = userStore.user as any;
+	return (f || u?.email || "Я").charAt(0).toUpperCase();
+});
+
+// ===== Данные дневника =====
+const hasEntries = computed(() => cbtStore.entries.length > 0);
+const totalEntries = computed(() => cbtStore.entries.length);
+const currentStreak = computed(() => calculateStreak());
+const recentEntries = computed(() => cbtStore.entries.slice(0, 3));
+
+const dailyTips = [
+	t("home.tips.1", "Записывайте мысль сразу, как заметили сильную эмоцию"),
+	t("home.tips.2", "Навязчивые размышления стихают, когда их выписываешь"),
+	t("home.tips.3", "Эмоция имеет право быть. Важно, как мы на неё отвечаем"),
+	t("home.tips.4", "Дневник помогает увидеть повторяющиеся ходы мысли"),
+	t("home.tips.5", "Отмечайте и тёплые моменты дня, не только трудные"),
+].map(String);
+
+const dailyTip = computed(() => dailyTips[now.value.getDay() % dailyTips.length]);
+
+// ===== Действия =====
+function openCapture() {
+	router.push("/capture");
+}
+function manualEntry() {
+	router.push("/add-entry");
+}
+function goToProfile() {
+	router.push("/profile");
+}
+
+// ===== Помощники =====
+function pluralize(n: number, forms: [string, string, string]): string {
+	const mod10 = n % 10;
+	const mod100 = n % 100;
+	if (mod10 === 1 && mod100 !== 11) return forms[0];
+	if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return forms[1];
+	return forms[2];
 }
 
 function calculateStreak(): number {
 	if (cbtStore.entries.length === 0) return 0;
 
-	let streak = 1;
-	const sortedEntries = [...cbtStore.entries].sort(
+	const sorted = [...cbtStore.entries].sort(
 		(a, b) =>
 			new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
 	);
 
-	const today = new Date();
-	today.setHours(0, 0, 0, 0);
-
-	for (let i = 0; i < sortedEntries.length - 1; i++) {
-		const currentDate = new Date(sortedEntries[i].createdAt);
-		const nextDate = new Date(sortedEntries[i + 1].createdAt);
-
-		currentDate.setHours(0, 0, 0, 0);
-		nextDate.setHours(0, 0, 0, 0);
-
+	let streak = 1;
+	for (let i = 0; i < sorted.length - 1; i++) {
+		const cur = new Date(sorted[i].createdAt);
+		const next = new Date(sorted[i + 1].createdAt);
+		cur.setHours(0, 0, 0, 0);
+		next.setHours(0, 0, 0, 0);
 		const diffDays =
-			(currentDate.getTime() - nextDate.getTime()) / (1000 * 60 * 60 * 24);
-
-		if (diffDays === 1) {
-			streak++;
-		} else {
-			break;
-		}
+			(cur.getTime() - next.getTime()) / (1000 * 60 * 60 * 24);
+		if (diffDays === 1) streak++;
+		else if (diffDays === 0) continue;
+		else break;
 	}
-
 	return streak;
-}
-
-function calculateWeeklyProgress(): number {
-	const now = new Date();
-	const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-	const weekEntries = cbtStore.entries.filter(
-		entry => new Date(entry.createdAt) >= weekAgo
-	);
-
-	// Предполагаем цель - 1 запись в день
-	const targetEntries = 7;
-	const progress = Math.round((weekEntries.length / targetEntries) * 100);
-
-	return Math.min(progress, 100);
-}
-
-function getMostFrequentEmotion(): string {
-	const emotionCount = new Map<number, number>();
-
-	cbtStore.entries.forEach((entry) => {
-		const thoughts = cbtStore.getEntryThoughts(entry as any);
-		thoughts.forEach((thought) => {
-			thought.emotions.forEach((emotion) => {
-				const count = emotionCount.get(emotion.emotionId) || 0;
-				emotionCount.set(emotion.emotionId, count + 1);
-			});
-		});
-	});
-
-	if (emotionCount.size === 0) return "—";
-
-	const mostFrequent = [...emotionCount.entries()].reduce((a, b) =>
-		a[1] > b[1] ? a : b
-	);
-
-	const em = emotionsStore.getEmotionById(mostFrequent[0]);
-	return em ? (t(em.nameKey, em.name || "") as string) : "—";
 }
 
 function formatTime(dateStr: string): string {
 	const date = new Date(dateStr);
-	const now = new Date();
-	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-	const entryDate = new Date(
-		date.getFullYear(),
-		date.getMonth(),
-		date.getDate()
-	);
+	const today = new Date();
+	const sameDay =
+		date.getFullYear() === today.getFullYear() &&
+		date.getMonth() === today.getMonth() &&
+		date.getDate() === today.getDate();
 
-	if (entryDate.getTime() === today.getTime()) {
+	if (sameDay) {
 		return `${t("common.today", "Сегодня")}, ${date.toLocaleTimeString(
 			undefined,
-			{
-				hour: "2-digit",
-				minute: "2-digit",
-			}
+			{ hour: "2-digit", minute: "2-digit" }
 		)}`;
 	}
-
-	return date.toLocaleDateString("ru-RU", {
-		day: "numeric",
-		month: "short",
-	});
+	return date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
 }
 
 function getEntryEmotions(entry: any): Array<{ id: number; name: string }> {
 	const thoughts = cbtStore.getEntryThoughts(entry);
 	const emotions: Array<{ id: number; name: string }> = [];
-
 	thoughts.forEach((thought) => {
 		thought.emotions.forEach((emotion) => {
 			const em = emotionsStore.getEmotionById(emotion.emotionId);
-			const emotionName = em
-				? (t(em.nameKey, em.name || "") as string)
-				: "";
-			if (emotionName && !emotions.find((e) => e.id === emotion.emotionId)) {
-				emotions.push({
-					id: emotion.emotionId,
-					name: emotionName,
-				});
+			const name = em ? (t(em.nameKey, em.name || "") as string) : "";
+			if (name && !emotions.find((e) => e.id === emotion.emotionId)) {
+				emotions.push({ id: emotion.emotionId, name });
 			}
 		});
 	});
-
 	return emotions;
 }
 
 function getEmotionColor(emotionId: number): string {
 	const emotion = emotionsStore.getEmotionById(emotionId);
-	if (!emotion) return "var(--primary)";
-
-	// Цвет берём из каталога категорий, а не из хардкод-карты id->цвет:
-	// id категорий определяются сервером
+	if (!emotion) return "var(--lamp)";
 	const category = emotionsStore.getCategoryById(emotion.categoryId);
-	return category?.color || "var(--primary)";
+	return category?.color || "var(--lamp)";
 }
 
 function getEntryPreview(entry: any): string {
-	if (!entry.situation)
-		return String(t("common.noDescription", "Без описания"));
-
-	const maxLength = 100;
-	if (entry.situation.length <= maxLength) return entry.situation;
-
-	return entry.situation.substring(0, maxLength) + "...";
-}
-
-function goToProfile() {
-	router.push("/profile");
-}
-
-function startBreathingExercise() {
-	console.log("Запуск дыхательного упражнения");
-	// TODO: Implement breathing exercise
+	if (!entry.situation) return String(t("common.noDescription", "Без описания"));
+	const max = 110;
+	return entry.situation.length <= max
+		? entry.situation
+		: entry.situation.slice(0, max) + "…";
 }
 
 async function loadData() {
@@ -452,464 +288,319 @@ async function loadData() {
 }
 
 onMounted(() => {
-	updateDateTime();
 	loadData();
-
-	// Обновляем время каждую минуту
-	setInterval(updateDateTime, 60000);
+	const id = setInterval(() => (now.value = new Date()), 60000);
+	// чистим на размонтировании страницы
+	return () => clearInterval(id);
 });
 </script>
 
-<style lang="scss">
-.home-page {
-	min-height: 100vh;
-	background: var(--bg-secondary);
-	padding-bottom: 80px;
+<style scoped>
+.home {
+	padding-bottom: 96px;
 }
 
-.home-container {
-	max-width: 500px;
+.home-inner {
+	width: 100%;
+	max-width: 440px;
 	margin: 0 auto;
-	padding: var(--space-4);
-}
-
-/* Header */
-.home-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: var(--space-6);
-}
-
-.greeting-title {
-	font-size: var(--text-3xl);
-	font-weight: var(--font-bold);
-	color: var(--text-primary);
-	margin-bottom: var(--space-1);
-}
-
-.greeting-subtitle {
-	font-size: var(--text-base);
-	color: var(--text-secondary);
-	text-transform: capitalize;
-}
-
-.profile-btn {
-	width: 48px;
-	height: 48px;
-	border: none;
-	background: var(--bg-primary);
-	border-radius: var(--radius-full);
-	box-shadow: var(--shadow-sm);
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	transition: all var(--transition-fast) var(--ease-in-out);
-}
-
-.profile-btn:hover {
-	transform: translateY(-2px);
-	box-shadow: var(--shadow-md);
-}
-
-.profile-btn .q-icon {
-	font-size: 28px;
-	color: var(--text-secondary);
-}
-
-/* Hero Section */
-.hero-section {
-	margin-bottom: var(--space-6);
-}
-
-.hero-card {
-	background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-	border-radius: var(--radius-xl);
-	padding: var(--space-6);
-	color: var(--text-inverse);
-	box-shadow: var(--shadow-lg);
-	position: relative;
-	overflow: hidden;
-}
-
-.hero-card::before {
-	content: "";
-	position: absolute;
-	top: -50%;
-	right: -50%;
-	width: 200%;
-	height: 200%;
-	background: radial-gradient(
-		circle,
-		rgba(255, 255, 255, 0.1) 0%,
-		transparent 70%
-	);
-	transform: rotate(45deg);
-}
-
-.hero-content {
-	position: relative;
-	z-index: 1;
-	margin-bottom: var(--space-5);
-}
-
-.hero-title {
-	font-size: var(--text-2xl);
-	font-weight: var(--font-bold);
-	margin-bottom: var(--space-2);
-}
-
-.hero-description {
-	font-size: var(--text-base);
-	opacity: 0.9;
-}
-
-.hero-cta {
-	position: relative;
-	z-index: 1;
-	width: 100%;
-	background: var(--text-inverse) !important;
-	color: var(--primary) !important;
-	font-weight: var(--font-semibold);
-}
-
-.hero-cta:hover {
-	background: rgba(255, 255, 255, 0.9) !important;
-}
-
-/* Statistics */
-.stats-overview {
-	margin-bottom: var(--space-6);
-}
-
-.section-title {
-	font-size: var(--text-xl);
-	font-weight: var(--font-semibold);
-	color: var(--text-primary);
-	margin-bottom: var(--space-4);
-}
-
-.stats-grid {
-	display: grid;
-	grid-template-columns: repeat(2, 1fr);
-	gap: var(--space-3);
-}
-
-.stat-card {
-	width: 100%;
-	overflow: hidden;
-	background: var(--bg-primary);
-	border-radius: var(--radius-lg);
-	padding: var(--space-4);
-	display: flex;
-	align-items: center;
-	gap: var(--space-3);
-	transition: all var(--transition-fast) var(--ease-in-out);
-	border: 1px solid var(--border-color);
-}
-
-.stat-card:hover {
-	transform: translateY(-2px);
-	box-shadow: var(--shadow-md);
-	border-color: var(--primary);
-}
-
-.stat-icon {
-	width: 48px;
-	height: 48px;
-	background: var(--bg-secondary);
-	border-radius: var(--radius-lg);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: var(--primary);
-}
-
-.stat-icon .q-icon {
-	font-size: 24px;
-}
-
-.stat-content {
-	flex: 1;
-}
-
-.stat-value {
-	font-size: var(--text-2xl);
-	font-weight: var(--font-bold);
-	color: var(--text-primary);
-	line-height: 1;
-}
-
-.stat-label {
-	font-size: var(--text-sm);
-	color: var(--text-secondary);
-	margin-top: var(--space-1);
-}
-
-/* Recent Entries */
-.recent-entries {
-	margin-bottom: var(--space-6);
-}
-
-.section-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: var(--space-4);
-}
-
-.see-all-btn {
-	display: flex;
-	align-items: center;
-	gap: var(--space-1);
-	border: none;
-	background: none;
-	color: var(--primary);
-	font-size: var(--text-sm);
-	font-weight: var(--font-medium);
-	cursor: pointer;
-	transition: all var(--transition-fast) var(--ease-in-out);
-}
-
-.see-all-btn:hover {
-	gap: var(--space-2);
-}
-
-.entries-preview {
+	padding: max(7dvh, 40px) 24px 24px;
 	display: flex;
 	flex-direction: column;
-	gap: var(--space-3);
 }
 
-.entry-preview-card {
-	background: var(--bg-primary);
-	border-radius: var(--radius-lg);
-	padding: var(--space-4);
-	cursor: pointer;
-	transition: all var(--transition-fast) var(--ease-in-out);
-	border: 1px solid var(--border-color);
-}
-
-.entry-preview-card:hover {
-	transform: translateX(4px);
-	box-shadow: var(--shadow-md);
-	border-color: var(--primary);
-}
-
-.entry-preview-header {
+/* ===== Шапка ===== */
+.home-head {
 	display: flex;
+	align-items: flex-start;
 	justify-content: space-between;
-	align-items: center;
-	margin-bottom: var(--space-2);
+	gap: 16px;
+	animation: rise 0.5s ease-out both;
 }
 
-.entry-preview-time {
-	font-size: var(--text-sm);
-	color: var(--text-secondary);
+.diary-date {
+	margin: 0 0 6px;
 }
 
-.entry-preview-emotions {
-	display: flex;
-	gap: var(--space-1);
-	flex-wrap: wrap;
-	overflow: hidden;
-	max-width: 100%;
-}
-
-.emotion-badge {
-	font-size: var(--text-xs);
-	padding: var(--space-1) var(--space-2);
-	border-radius: var(--radius-full);
-	color: var(--text-inverse);
-	font-weight: var(--font-medium);
-	white-space: nowrap;
-	max-width: 120px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.entry-preview-text {
-	font-size: var(--text-base);
-	color: var(--text-primary);
-	line-height: var(--leading-normal);
+.home-greet {
+	font-family: "Spectral", Georgia, serif;
+	font-weight: 500;
+	font-size: clamp(28px, 8vw, 34px);
+	line-height: 1.08;
+	letter-spacing: -0.015em;
 	margin: 0;
 }
 
-/* Quick Actions */
-.quick-actions {
-	margin-bottom: var(--space-6);
-}
-
-.actions-grid {
-	display: grid;
-	grid-template-columns: repeat(2, 1fr);
-	gap: var(--space-3);
-}
-
-.action-card {
-	background: var(--bg-primary);
-	border: 1px solid var(--border-color);
-	border-radius: var(--radius-lg);
-	padding: var(--space-4);
+.avatar-btn {
+	flex-shrink: 0;
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	border: 1px solid var(--line);
+	background: var(--ink-soft);
+	color: var(--paper);
+	font-family: "Spectral", Georgia, serif;
+	font-size: 18px;
 	cursor: pointer;
-	transition: all var(--transition-fast) var(--ease-in-out);
-	text-align: left;
+	transition: border-color 0.2s ease;
+}
+.avatar-btn:hover {
+	border-color: var(--lamp);
 }
 
-.action-card:hover {
-	transform: translateY(-2px);
-	box-shadow: var(--shadow-md);
-	border-color: var(--primary);
+/* ===== Голосовой захват ===== */
+.capture {
+	margin-top: max(6dvh, 44px);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	animation: rise 0.5s ease-out 0.08s both;
 }
 
-.action-icon-wrapper {
-	width: 48px;
-	height: 48px;
-	border-radius: var(--radius-md);
+.capture-orb {
+	position: relative;
+	width: 132px;
+	height: 132px;
+	border-radius: 50%;
+	border: none;
+	cursor: pointer;
+	display: grid;
+	place-items: center;
+	color: #181203;
+	background:
+		radial-gradient(circle at 50% 38%, #f7c887 0%, var(--lamp) 55%, var(--lamp-deep) 100%);
+	box-shadow:
+		0 0 0 1px rgba(240, 178, 100, 0.35),
+		0 18px 50px -12px rgba(240, 178, 100, 0.55),
+		0 0 80px -10px rgba(240, 178, 100, 0.35);
+	transition: transform 0.12s ease;
+}
+.capture-orb:active {
+	transform: scale(0.96);
+}
+
+.orb-mic {
+	position: relative;
+	width: 46px;
+	height: 46px;
+	z-index: 1;
+}
+
+/* Дыхание лампы */
+.orb-ring {
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+	border: 1px solid rgba(240, 178, 100, 0.5);
+	animation: orb-breathe 3.4s ease-out infinite;
+}
+.orb-ring-2 {
+	animation-delay: 1.7s;
+}
+
+@keyframes orb-breathe {
+	0% {
+		transform: scale(1);
+		opacity: 0.6;
+	}
+	100% {
+		transform: scale(1.55);
+		opacity: 0;
+	}
+}
+
+.capture-title {
+	font-family: "Spectral", Georgia, serif;
+	font-weight: 500;
+	font-size: 24px;
+	letter-spacing: -0.01em;
+	margin: 26px 0 0;
+}
+
+.capture-sub {
+	font-size: 15px;
+	line-height: 1.5;
+	color: var(--paper-dim);
+	margin: 10px 0 0;
+	max-width: 30ch;
+}
+
+.capture-manual {
+	margin-top: 16px;
+	font-size: 14px;
+	border-bottom: 1px solid transparent;
+	padding-bottom: 1px;
+}
+.capture-manual:hover {
+	border-bottom-color: var(--line);
+}
+
+/* ===== Тихая строка состояния ===== */
+.diary-stat {
+	margin: max(6dvh, 40px) 0 0;
+	text-align: center;
+	font-size: 14px;
+	color: var(--paper-dim);
+	letter-spacing: 0.01em;
+	animation: rise 0.5s ease-out 0.14s both;
+}
+.diary-stat-strong {
+	color: var(--paper);
+	font-weight: 600;
+}
+
+/* ===== Последние страницы ===== */
+.pages {
+	margin-top: 28px;
+	animation: rise 0.5s ease-out 0.18s both;
+}
+
+.pages-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	margin-bottom: 14px;
+}
+
+.pages-title {
+	font-family: "Spectral", Georgia, serif;
+	font-weight: 500;
+	font-size: 19px;
+	margin: 0;
+}
+
+.pages-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.page-card {
+	background: rgba(26, 31, 43, 0.6);
+	border: 1px solid var(--line);
+	border-radius: 16px;
+	padding: 16px 18px;
+	cursor: pointer;
+	transition: border-color 0.2s ease, background 0.2s ease;
+}
+.page-card:hover {
+	border-color: rgba(240, 178, 100, 0.4);
+	background: rgba(26, 31, 43, 0.85);
+}
+
+.page-card-top {
 	display: flex;
 	align-items: center;
-	justify-content: center;
-	margin-bottom: var(--space-3);
+	justify-content: space-between;
+	gap: 10px;
+	margin-bottom: 8px;
 }
 
-.action-icon-wrapper.analytics {
-	background: var(--primary-light);
-	color: var(--primary);
+.page-time {
+	font-size: 12.5px;
+	color: var(--paper-dim);
+	white-space: nowrap;
 }
 
-.action-icon-wrapper.breathing {
-	background: var(--success-light);
-	color: var(--success);
-}
-
-.action-icon-wrapper.resources {
-	background: var(--warning-light);
-	color: var(--warning);
-}
-
-.action-icon-wrapper.settings {
-	background: var(--info-light);
-	color: var(--info);
-}
-
-.action-icon-wrapper .q-icon {
-	font-size: 24px;
-}
-
-.action-label {
-	font-size: var(--text-base);
-	font-weight: var(--font-semibold);
-	color: var(--text-primary);
-	display: block;
-	margin-bottom: var(--space-1);
-}
-
-.action-description {
-	font-size: var(--text-sm);
-	color: var(--text-secondary);
-	margin: 0;
-}
-
-/* Daily Tip */
-.daily-tip {
-	background: var(--bg-primary);
-	border-radius: var(--radius-lg);
-	padding: var(--space-4);
+.page-emotions {
 	display: flex;
-	gap: var(--space-3);
-	border: 1px solid var(--border-color);
+	gap: 6px;
+	flex-wrap: wrap;
+	justify-content: flex-end;
 }
 
-.tip-icon {
-	font-size: 32px;
-	line-height: 1;
+.ink-tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 12px;
+	color: var(--paper-faint);
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	padding: 3px 9px 3px 7px;
+	white-space: nowrap;
 }
 
-.tip-content {
-	flex: 1;
+.ink-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	flex-shrink: 0;
 }
 
-.tip-title {
-	font-size: var(--text-base);
-	font-weight: var(--font-semibold);
-	color: var(--text-primary);
-	margin-bottom: var(--space-1);
-}
-
-.tip-text {
-	font-size: var(--text-sm);
-	color: var(--text-secondary);
-	line-height: var(--leading-relaxed);
+.page-text {
+	font-size: 15px;
+	line-height: 1.45;
+	color: var(--paper);
 	margin: 0;
 }
 
-/* Responsive */
-@media (max-width: 400px) {
-	.stats-grid,
-	.actions-grid {
-		grid-template-columns: 1fr;
+/* ===== Пустой дневник ===== */
+.empty {
+	margin-top: max(6dvh, 40px);
+	text-align: center;
+	animation: rise 0.5s ease-out 0.14s both;
+}
+.empty-line {
+	font-family: "Spectral", Georgia, serif;
+	font-style: italic;
+	font-size: 19px;
+	color: var(--paper-dim);
+	margin: 0 0 8px;
+}
+.empty-sub {
+	font-size: 14px;
+	line-height: 1.5;
+	color: var(--paper-dim);
+	margin: 0 auto;
+	max-width: 30ch;
+}
+
+/* ===== Мысль на вечер ===== */
+.diary-thought {
+	margin: max(7dvh, 44px) 0 0;
+	font-family: "Spectral", Georgia, serif;
+	font-style: italic;
+	font-size: 17px;
+	line-height: 1.5;
+	color: var(--paper-dim);
+	text-align: center;
+	padding: 0 6px;
+}
+
+.home-disclaimer {
+	margin: 22px 0 0;
+	text-align: center;
+	font-size: 12px;
+	line-height: 1.5;
+	color: rgba(151, 144, 126, 0.7);
+}
+
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
 	}
 }
 
-/* Темная тема */
-:root.dark {
-	.hero-card {
-		background: linear-gradient(135deg, var(--primary-dark), #1e293b);
-		border: 1px solid rgba(96, 165, 250, 0.3);
+@media (prefers-reduced-motion: reduce) {
+	.home-head,
+	.capture,
+	.diary-stat,
+	.pages,
+	.empty {
+		animation: none;
 	}
-
-	.stat-card {
-		background: var(--bg-tertiary);
-		border-color: transparent;
-	}
-
-	.stat-card:hover {
-		border-color: var(--primary);
-		background: var(--bg-hover);
-	}
-
-	.stat-icon {
-		background: rgba(96, 165, 250, 0.1);
-	}
-
-	.entry-preview-card {
-		background: var(--bg-tertiary);
-		border-color: transparent;
-	}
-
-	.entry-preview-card:hover {
-		border-color: var(--primary);
-		background: var(--bg-hover);
-	}
-
-	.action-card {
-		background: var(--bg-tertiary);
-		border-color: transparent;
-	}
-
-	.action-card:hover {
-		border-color: var(--primary);
-		background: var(--bg-hover);
-	}
-
-	.action-icon-wrapper {
-		filter: brightness(0.8);
-	}
-
-	.daily-tip {
-		background: var(--bg-tertiary);
-		border-color: transparent;
-	}
-
-	.profile-btn {
-		background: var(--bg-tertiary);
-		border: 1px solid transparent;
-	}
-
-	.profile-btn:hover {
-		border-color: var(--primary);
-		background: var(--bg-hover);
+	.orb-ring {
+		display: none;
 	}
 }
-</style> 
+</style>

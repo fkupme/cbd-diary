@@ -1,0 +1,69 @@
+/* «Вечерний дневник» — общие токены и подложка.
+   Добавь класс .diary-theme на корень страницы — получишь палитру, фон и типографику.
+   Палитра намеренно фиксированная (тёмная «обложка»), не зависит от светлой/тёмной темы приложения. */
+.diary-theme {
+	--ink: #12151d;
+	--ink-soft: #1a1f2b;
+	--paper: #ede6d6;
+	--paper-dim: #97907e;
+	--paper-faint: rgba(237, 230, 214, 0.55);
+	--lamp: #f0b264;
+	--lamp-deep: #d99a45;
+	--coral: #e26d5c;
+	--line: rgba(237, 230, 214, 0.14);
+
+	min-height: 100dvh;
+	background:
+		radial-gradient(
+			90% 48% at 88% -12%,
+			rgba(226, 166, 91, 0.13) 0%,
+			rgba(226, 166, 91, 0) 60%
+		),
+		radial-gradient(120% 100% at 50% 110%, #0d1017 0%, var(--ink) 55%);
+	color: var(--paper);
+	font-family: "Onest", system-ui, sans-serif;
+}
+
+/* Дата прописью курсивом — «четверг, 11 июня» */
+.diary-theme .diary-date {
+	font-family: "Spectral", Georgia, serif;
+	font-style: italic;
+	font-size: 15px;
+	color: var(--paper-dim);
+}
+.diary-theme .diary-date::first-letter {
+	text-transform: uppercase;
+}
+
+/* Кнопка-«лампа»: янтарная, тёмный текст, мягкое свечение */
+.diary-theme .lamp-btn {
+	appearance: none;
+	border: none;
+	cursor: pointer;
+	font-family: inherit;
+	font-weight: 600;
+	color: #181203;
+	background: var(--lamp);
+	box-shadow: 0 10px 30px -12px rgba(240, 178, 100, 0.6);
+	transition: background 0.2s ease, transform 0.1s ease;
+}
+.diary-theme .lamp-btn:active {
+	transform: scale(0.985);
+}
+.diary-theme .lamp-btn:hover {
+	background: var(--lamp-deep);
+}
+
+/* Текстовая ссылка-кнопка */
+.diary-theme .text-link {
+	appearance: none;
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-family: inherit;
+	color: var(--paper-dim);
+	transition: color 0.2s ease;
+}
+.diary-theme .text-link:hover {
+	color: var(--paper);
+}

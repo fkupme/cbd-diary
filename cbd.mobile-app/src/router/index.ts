@@ -71,6 +71,15 @@ const routes: RouteRecordRaw[] = [
 		},
 	},
 	{
+		path: '/capture',
+		name: 'Capture',
+		component: () => import('../pages/VoiceCapture.vue'),
+		meta: {
+			requiresAuth: true,
+			hideTabBar: true,
+		},
+	},
+	{
 		path: '/add-entry',
 		name: 'AddEntry',
 		component: AddEntry,

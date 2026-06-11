@@ -1,0 +1,13 @@
+{
+	"version": "0.0.1",
+	"configurations": [
+		{
+			"name": "mobile-web",
+			"runtimeExecutable": "npm",
+			"runtimeArgs": ["run", "dev"],
+			"cwd": "cbd.mobile-app",
+			"port": 1420,
+			"autoPort": false
+		}
+	]
+}

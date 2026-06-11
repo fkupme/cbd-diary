@@ -1,218 +1,174 @@
 <template>
-	<div class="add-entry-page">
+	<div class="add-entry-page diary-theme">
 		<div class="add-entry-container">
-			<!-- Header -->
-			<div class="add-entry-header">
-				<q-btn
-					class="back-btn"
-					@click="$router.go(-1)"
-					round
-					flat
-					icon="arrow_back"
-				/>
+			<!-- Шапка -->
+			<header class="add-entry-header">
+				<button class="back-btn" @click="$router.go(-1)" aria-label="Назад">
+					<q-icon name="arrow_back" />
+				</button>
 				<h1 class="page-title">{{ t("entry.newEntry", "Новая запись") }}</h1>
 				<div class="header-spacer"></div>
-			</div>
+			</header>
 
-			<!-- Единая форма -->
+			<!-- Форма -->
 			<div class="entry-form" v-if="!isLoading">
-				<div class="form-card">
-					<!-- Ситуация -->
-					<div class="form-group">
-						<div class="group-header">
-							<h3 class="group-title">{{ t("entry.situation") }}</h3>
-							<q-btn
-								class="help-btn"
-								@click="showHelp('situation')"
-								round
-								flat
-								icon="help_outline"
-							>
-								<q-tooltip>
-									{{
-										t(
-											"entry.situationTooltip",
-											"Опишите что произошло, где вы были, с кем, какие обстоятельства"
-										)
-									}}
-								</q-tooltip>
-							</q-btn>
-						</div>
-						<CbdInput
-							v-model="situation"
-							:placeholder="t('entry.situationPlaceholder', 'Что произошло?..')"
-							variant="textarea"
-							outlined
-							multiline
-							autogrow
-							:label="t('entry.situationLabel', 'Опишите ситуацию')"
-						/>
-					</div>
-
-					<!-- Мысли и эмоции -->
-					<div class="form-group">
-						<div class="group-header">
-							<h3 class="group-title">
-								{{ t("entry.thoughtsAndEmotions", "Мысли и эмоции") }}
-							</h3>
-							<q-btn
-								class="help-btn"
-								@click="showHelp('thoughts')"
-								round
-								flat
-								icon="help_outline"
-							>
-								<q-tooltip>
-									{{
-										t(
-											"entry.thoughtsAndEmotionsTooltip",
-											'Добавьте до 3 цепочек "мысль → эмоция". Первая обязательна'
-										)
-									}}
-								</q-tooltip>
-							</q-btn>
-						</div>
-
-						<div
-							v-for="(chain, index) in thoughtChains"
-							:key="index"
-							class="thought-chain"
-						>
-							<div class="chain-header">
-								<span class="chain-number">{{ index + 1 }}</span>
-								<span class="chain-title">{{
-									t("entry.thought", "Мысль")
-								}}</span>
-								<q-btn
-									v-if="index > 0"
-									@click="removeThoughtChain(index)"
-									class="remove-btn"
-									round
-									flat
-									icon="close"
-								/>
-							</div>
-
-							<CbdInput
-								v-model="chain.thought"
-								:placeholder="
+				<!-- Ситуация -->
+				<section class="form-group">
+					<div class="group-header">
+						<h3 class="group-label">{{ t("entry.situation", "Ситуация") }}</h3>
+						<q-icon name="help_outline" class="help-ic">
+							<q-tooltip class="diary-tooltip">
+								{{
 									t(
-										'entry.thoughtPlaceholder',
-										'Какая мысль пришла в голову?..'
+										"entry.situationTooltip",
+										"Опишите что произошло, где вы были, с кем, какие обстоятельства"
 									)
-								"
-								variant="textarea"
-								outlined
-								:label="t('entry.thought', 'Мысль')"
-								multiline
-								autogrow
-							/>
+								}}
+							</q-tooltip>
+						</q-icon>
+					</div>
+					<textarea
+						v-model="situation"
+						class="diary-textarea"
+						rows="2"
+						:placeholder="t('entry.situationPlaceholder', 'Что произошло?..')"
+						@input="autosize"
+					></textarea>
+				</section>
 
-							<div class="emotions-section">
-								<div class="emotions-header">
-									<span class="emotions-label">{{
-										t("entry.emotions", "Эмоции")
-									}}</span>
-									<q-btn
-										@click="showEmotionWheel(index)"
-										class="add-emotion-btn"
-										:disabled="chain.emotions.length >= 5"
-										flat
-										icon="add"
-									>
-										{{
-											chain.emotions.length === 0
-												? t("common.select", "Выбрать")
-												: t("common.add", "Добавить")
-										}}
-									</q-btn>
-								</div>
+				<!-- Мысли и эмоции -->
+				<section class="form-group">
+					<div class="group-header">
+						<h3 class="group-label">
+							{{ t("entry.thoughtsAndEmotions", "Мысли и эмоции") }}
+						</h3>
+						<q-icon name="help_outline" class="help-ic">
+							<q-tooltip class="diary-tooltip">
+								{{
+									t(
+										"entry.thoughtsAndEmotionsTooltip",
+										'Добавьте до 3 цепочек "мысль → эмоция". Первая обязательна'
+									)
+								}}
+							</q-tooltip>
+						</q-icon>
+					</div>
 
-								<div v-if="chain.emotions.length > 0" class="selected-emotions">
-									<q-chip
-										v-for="emotion in chain.emotions"
-										:key="emotion.id"
-										:color="getEmotionChipColor(emotion.id)"
-										text-color="white"
-										removable
-										@remove="removeEmotion(index, emotion.id)"
-										class="emotion-chip"
-									>
-										<span class="emotion-text">{{ emotion.name }}</span>
-										<span class="emotion-intensity"
-											>{{ emotion.intensity }}/10</span
-										>
-									</q-chip>
-								</div>
+					<div
+						v-for="(chain, index) in thoughtChains"
+						:key="index"
+						class="thought-chain"
+					>
+						<div class="chain-header">
+							<span class="chain-number">{{ index + 1 }}</span>
+							<span class="chain-title">{{ t("entry.thought", "Мысль") }}</span>
+							<button
+								v-if="index > 0"
+								@click="removeThoughtChain(index)"
+								class="chain-remove"
+								aria-label="Убрать мысль"
+							>
+								<q-icon name="close" />
+							</button>
+						</div>
+
+						<textarea
+							v-model="chain.thought"
+							class="diary-textarea"
+							rows="2"
+							:placeholder="
+								t('entry.thoughtPlaceholder', 'Какая мысль пришла в голову?..')
+							"
+							@input="autosize"
+						></textarea>
+
+						<div class="emotions-section">
+							<div class="emotions-header">
+								<span class="emotions-label">{{
+									t("entry.emotions", "Эмоции")
+								}}</span>
+								<button
+									@click="showEmotionWheel(index)"
+									class="add-emotion-btn"
+									:disabled="chain.emotions.length >= 5"
+								>
+									<q-icon name="add" />
+									{{
+										chain.emotions.length === 0
+											? t("common.select", "Выбрать")
+											: t("common.add", "Добавить")
+									}}
+								</button>
+							</div>
+
+							<div v-if="chain.emotions.length > 0" class="selected-emotions">
+								<button
+									v-for="emotion in chain.emotions"
+									:key="emotion.id"
+									class="emotion-tag"
+									@click="removeEmotion(index, emotion.id)"
+								>
+									<i
+										class="emotion-dot"
+										:style="{ background: emotionDot(emotion.id) }"
+									></i>
+									<span class="emotion-name">{{ emotion.name }}</span>
+									<em class="emotion-intensity">{{ emotion.intensity }}/10</em>
+									<q-icon name="close" class="emotion-x" />
+								</button>
 							</div>
 						</div>
-
-						<q-btn
-							v-if="thoughtChains.length < 3"
-							@click="addThoughtChain"
-							class="add-thought-btn"
-							flat
-							icon="add"
-						>
-							{{ t("entry.addThought", "Добавить мысль") }}
-						</q-btn>
 					</div>
 
-					<!-- Реакции -->
-					<div class="form-group">
-						<div class="group-header">
-							<h3 class="group-title">{{ t("entry.reactions") }}</h3>
-							<q-btn
-								class="help-btn"
-								@click="showHelp('reactions')"
-								round
-								flat
-								icon="help_outline"
-							>
-								<q-tooltip>
-									{{
-										t(
-											"entry.reactionsTooltip",
-											"Опишите что вы сделали, как отреагировали, как себя вели"
-										)
-									}}
-								</q-tooltip>
-							</q-btn>
-						</div>
-						<CbdInput
-							v-model="reactions"
-							:placeholder="
-								t(
-									'entry.reactionsPlaceholder',
-									'Что вы сделали? Как отреагировали?..'
-								)
-							"
-							variant="textarea"
-							outlined
-							:label="t('entry.reactions')"
-							multiline
-							autogrow
-						/>
-					</div>
-
-					<!-- Кнопка сохранения -->
-					<CbdButton
-						:loading="isSaving"
-						:disabled="!canSave"
-						variant="primary"
-						size="lg"
-						class="save-btn"
-						@click="saveEntry"
+					<button
+						v-if="thoughtChains.length < 3"
+						@click="addThoughtChain"
+						class="add-thought-btn"
 					>
-						{{ t("entry.saveEntry", "Сохранить запись") }}
-					</CbdButton>
-				</div>
+						<q-icon name="add" />
+						{{ t("entry.addThought", "Добавить мысль") }}
+					</button>
+				</section>
+
+				<!-- Реакции -->
+				<section class="form-group">
+					<div class="group-header">
+						<h3 class="group-label">{{ t("entry.reactions", "Реакции") }}</h3>
+						<q-icon name="help_outline" class="help-ic">
+							<q-tooltip class="diary-tooltip">
+								{{
+									t(
+										"entry.reactionsTooltip",
+										"Опишите что вы сделали, как отреагировали, как себя вели"
+									)
+								}}
+							</q-tooltip>
+						</q-icon>
+					</div>
+					<textarea
+						v-model="reactions"
+						class="diary-textarea"
+						rows="2"
+						:placeholder="
+							t('entry.reactionsPlaceholder', 'Что вы сделали? Как отреагировали?..')
+						"
+						@input="autosize"
+					></textarea>
+				</section>
+
+				<!-- Сохранить -->
+				<button
+					class="lamp-btn save-btn"
+					:disabled="!canSave || isSaving"
+					@click="saveEntry"
+				>
+					{{ isSaving ? t("common.saving", "Сохраняю…") : t("entry.saveEntry", "Сохранить запись") }}
+				</button>
 			</div>
 
 			<!-- Загрузка -->
 			<div v-if="isLoading" class="loading-state">
-				<div class="loading-spinner">⏳</div>
-				<p>{{ t("common.loading") }}</p>
+				<p class="loading-line">{{ t("common.loading", "Загрузка…") }}</p>
 			</div>
 		</div>
 
@@ -229,8 +185,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
-import { CbdButton, CbdEmotionWheelPicker, CbdInput } from "../components/ui";
+import { useRoute, useRouter } from "vue-router";
+import { CbdEmotionWheelPicker } from "../components/ui";
 import { useKeyboardHandling } from "../composables/useKeyboardHandling";
 import { useLocalization } from "../composables/useLocalization";
 
@@ -255,6 +211,7 @@ interface ThoughtChain {
 }
 
 const router = useRouter();
+const route = useRoute();
 
 // Stores и композаблы
 const cbtStore = useCBTStore();
@@ -353,31 +310,19 @@ function removeEmotion(chainIndex: number, emotionId: number) {
 	chain.emotions = chain.emotions.filter((e) => e.id !== emotionId);
 }
 
-function getEmotionChipColor(emotionId: number): string {
+// Цвет точки эмоции — из цвета категории (как в дневнике)
+function emotionDot(emotionId: number): string {
 	const emotion = emotionsStore.getEmotionById(emotionId);
-	if (!emotion) return "blue";
-
-	const category = emotionsStore.getCategoryById(emotion.categoryId);
-	if (!category) return "blue";
-
-	// Маппинг цветов категорий на цвета Quasar
-	const colorMap: Record<string, string> = {
-		red: "red",
-		blue: "blue",
-		green: "green",
-		orange: "orange",
-		purple: "purple",
-		teal: "teal",
-		amber: "amber",
-		pink: "pink",
-	};
-
-	return colorMap[category.color] || "primary";
+	if (!emotion) return "var(--lamp)";
+	const cat = emotionsStore.getCategoryById(emotion.categoryId);
+	return (cat as any)?.color || "var(--lamp)";
 }
 
-function showHelp(type: string) {
-	// Заглушка для хелпа, можно добавить модалки или что-то еще
-	console.log(`Help for: ${type}`);
+// Авто-рост текстовых полей под содержимое
+function autosize(e: Event) {
+	const el = e.target as HTMLTextAreaElement;
+	el.style.height = "auto";
+	el.style.height = `${el.scrollHeight}px`;
 }
 
 // Сохранение записи с новыми API сервисами
@@ -490,6 +435,11 @@ async function loadData() {
 }
 
 onMounted(() => {
+	// Текст из голосового/быстрого захвата (/capture) — предзаполняем ситуацию
+	const fromCapture = route.query.situation;
+	if (typeof fromCapture === "string" && fromCapture.trim()) {
+		situation.value = fromCapture.trim();
+	}
 	loadData();
 });
 
@@ -499,381 +449,324 @@ useKeyboardHandling(".add-entry-page", 320);
 
 <style scoped>
 .add-entry-page {
-	min-height: 100vh;
 	position: relative;
-	background: var(--bg-secondary);
-	/* padding-bottom: env(safe-area-inset-bottom); */
+	height: 100dvh;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
 	overflow-x: hidden;
-	transition: background-color var(--transition-base) var(--ease-in-out);
 }
 
 .add-entry-container {
+	width: 100%;
+	max-width: 460px;
 	margin: 0 auto;
-	padding-inline: var(--space-3);
-	max-width: 600px;
-	margin-bottom: 60px;
+	padding: max(5dvh, 28px) 24px max(40px, env(safe-area-inset-bottom));
 }
 
+/* ===== Шапка ===== */
 .add-entry-header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	margin-bottom: var(--space-4);
+	gap: 12px;
+	margin-bottom: max(3dvh, 22px);
 	padding-top: env(safe-area-inset-top);
+	animation: rise 0.5s ease-out both;
 }
 
 .back-btn {
-	width: 44px;
-	height: 44px;
-	border: none;
-	background: var(--bg-primary);
-	border-radius: var(--radius-full);
-	box-shadow: var(--shadow-sm);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	transition: all var(--transition-fast) var(--ease-in-out);
+	width: 42px;
+	height: 42px;
+	display: grid;
+	place-items: center;
+	border: 1px solid var(--line);
+	background: rgba(237, 230, 214, 0.04);
+	color: var(--paper-dim);
+	border-radius: 50%;
 	cursor: pointer;
+	transition: color 0.2s ease, border-color 0.2s ease;
 }
-
 .back-btn:hover {
-	transform: translateY(-2px);
-	box-shadow: var(--shadow-md);
+	color: var(--paper);
+	border-color: rgba(240, 178, 100, 0.4);
 }
-
-.back-btn:active {
-	transform: translateY(0);
-	box-shadow: var(--shadow-sm);
-}
-
 .back-btn .q-icon {
 	font-size: 20px;
-	color: var(--text-primary);
 }
 
 .page-title {
-	font-size: var(--text-2xl);
-	font-weight: var(--font-bold);
-	color: var(--text-primary);
+	font-family: "Spectral", Georgia, serif;
+	font-weight: 500;
+	font-size: 24px;
+	letter-spacing: -0.01em;
+	color: var(--paper);
 	margin: 0;
 }
-
 .header-spacer {
-	width: 44px;
+	width: 42px;
 }
 
-.form-card {
-	background: var(--bg-primary);
-	border-radius: var(--radius-lg);
-	padding: var(--space-6);
-	box-shadow: var(--shadow-sm);
-	border: 1px solid var(--border-color);
-}
-
+/* ===== Секции ===== */
 .form-group {
-	margin-bottom: var(--space-6);
-}
-
-.form-group:last-child {
-	margin-bottom: 0;
+	margin-bottom: 26px;
+	animation: rise 0.5s ease-out 0.06s both;
 }
 
 .group-header {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	margin-bottom: var(--space-3);
+	gap: 8px;
+	margin-bottom: 12px;
 }
-
-.group-title {
-	font-size: var(--text-lg);
-	font-weight: var(--font-semibold);
-	color: var(--text-primary);
+.group-label {
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--paper-dim);
 	margin: 0;
 }
-
-.help-btn {
-	width: 32px;
-	height: 32px;
-	border: none;
-	background: var(--bg-hover);
-	border-radius: var(--radius-full);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	cursor: pointer;
-	transition: all var(--transition-fast) var(--ease-in-out);
+.help-ic {
+	font-size: 16px;
+	color: rgba(151, 144, 126, 0.6);
+	cursor: help;
 }
 
-.help-btn:hover {
-	background: var(--primary);
-	color: var(--text-inverse);
+/* ===== Текстовые поля ===== */
+.diary-textarea {
+	width: 100%;
+	resize: none;
+	min-height: 54px;
+	background: rgba(26, 31, 43, 0.55);
+	border: 1px solid var(--line);
+	border-radius: 14px;
+	padding: 13px 15px;
+	color: var(--paper);
+	font-family: inherit;
+	font-size: 16px;
+	line-height: 1.5;
+	outline: none;
+	caret-color: var(--lamp);
+	transition: border-color 0.2s ease, background 0.2s ease;
+}
+.diary-textarea::placeholder {
+	color: rgba(151, 144, 126, 0.5);
+}
+.diary-textarea:focus {
+	border-color: rgba(240, 178, 100, 0.55);
+	background: rgba(26, 31, 43, 0.8);
 }
 
-.help-btn .q-icon {
-	font-size: 18px;
-	color: var(--text-secondary);
-}
-
-.help-btn:hover .q-icon {
-	color: var(--text-inverse);
-}
-
+/* ===== Цепочка мысли ===== */
 .thought-chain {
-	border: 1px solid var(--border-color);
-	border-radius: var(--radius-base);
-	padding: var(--space-4);
-	margin-bottom: var(--space-3);
-	background: var(--bg-secondary);
-	transition: all var(--transition-fast) var(--ease-in-out);
-}
-
-.thought-chain:hover {
-	border-color: var(--border-color-hover);
-	box-shadow: var(--shadow-sm);
+	border: 1px solid var(--line);
+	border-radius: 16px;
+	padding: 15px;
+	margin-bottom: 12px;
+	background: rgba(18, 21, 29, 0.4);
 }
 
 .chain-header {
 	display: flex;
 	align-items: center;
-	gap: var(--space-2);
-	margin-bottom: var(--space-3);
+	gap: 10px;
+	margin-bottom: 11px;
 }
-
 .chain-number {
-	background: var(--primary);
-	color: var(--text-inverse);
 	width: 24px;
 	height: 24px;
-	border-radius: var(--radius-full);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: var(--text-sm);
-	font-weight: var(--font-bold);
+	border-radius: 50%;
+	display: grid;
+	place-items: center;
+	background: rgba(240, 178, 100, 0.14);
+	border: 1px solid rgba(240, 178, 100, 0.45);
+	color: var(--lamp);
+	font-size: 13px;
+	font-weight: 600;
+	font-family: "Spectral", Georgia, serif;
 }
-
 .chain-title {
-	font-weight: var(--font-medium);
-	color: var(--text-primary);
 	flex: 1;
+	font-size: 12px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--paper-dim);
 }
-
-.remove-btn {
-	width: 24px;
-	height: 24px;
+.chain-remove {
+	width: 26px;
+	height: 26px;
+	display: grid;
+	place-items: center;
 	border: none;
-	background: var(--error);
-	border-radius: var(--radius-full);
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	background: none;
+	color: var(--paper-dim);
+	border-radius: 50%;
 	cursor: pointer;
-	transition: all var(--transition-fast) var(--ease-in-out);
+	transition: color 0.2s ease;
+}
+.chain-remove:hover {
+	color: var(--coral);
+}
+.chain-remove .q-icon {
+	font-size: 17px;
 }
 
-.remove-btn:hover {
-	transform: scale(1.1);
-	box-shadow: var(--shadow-sm);
-}
-
-.remove-btn .q-icon {
-	font-size: 14px;
-	color: var(--text-inverse);
-}
-
+/* ===== Эмоции ===== */
 .emotions-section {
-	margin-top: var(--space-3);
+	margin-top: 12px;
 }
-
 .emotions-header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	margin-bottom: var(--space-2);
+	margin-bottom: 10px;
 }
-
 .emotions-label {
-	font-weight: var(--font-medium);
-	color: var(--text-primary);
+	font-size: 12px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--paper-dim);
 }
-
 .add-emotion-btn {
-	background: var(--primary);
-	color: var(--text-inverse);
-	border: none;
-	border-radius: var(--radius-sm);
-	padding: var(--space-1) var(--space-2);
-	font-size: var(--text-sm);
-	font-weight: var(--font-medium);
-	cursor: pointer;
-	display: flex;
+	display: inline-flex;
 	align-items: center;
-	gap: var(--space-1);
-	transition: all var(--transition-fast) var(--ease-in-out);
+	gap: 4px;
+	appearance: none;
+	border: 1px solid rgba(240, 178, 100, 0.5);
+	background: transparent;
+	color: var(--lamp);
+	font-family: inherit;
+	font-size: 13px;
+	font-weight: 500;
+	padding: 6px 12px;
+	border-radius: 999px;
+	cursor: pointer;
+	transition: background 0.2s ease;
 }
-
+.add-emotion-btn .q-icon {
+	font-size: 16px;
+}
 .add-emotion-btn:hover:not(:disabled) {
-	background: var(--primary-hover);
-	transform: translateY(-1px);
-	box-shadow: var(--shadow-sm);
+	background: rgba(240, 178, 100, 0.1);
 }
-
-.add-emotion-btn:active:not(:disabled) {
-	background: var(--primary-active);
-	transform: translateY(0);
-}
-
 .add-emotion-btn:disabled {
-	opacity: 0.5;
+	opacity: 0.4;
 	cursor: not-allowed;
 }
 
 .selected-emotions {
 	display: flex;
 	flex-wrap: wrap;
-	gap: var(--space-1);
-	margin-top: var(--space-2);
+	gap: 7px;
 }
-
-.emotion-chip {
-	border-radius: var(--radius-sm) !important;
-	font-size: var(--text-sm);
-	box-shadow: var(--shadow-xs);
-	transition: all var(--transition-fast) var(--ease-in-out);
-}
-
-.emotion-chip:hover {
-	transform: translateY(-1px);
-	box-shadow: var(--shadow-sm);
-}
-
-.emotion-text {
-	font-weight: var(--font-medium);
-}
-
-.emotion-intensity {
-	opacity: 0.9;
-	background: rgba(255, 255, 255, 0.2);
-	border-radius: var(--radius-sm);
-	padding: 2px 6px;
-	margin-left: 4px;
-	font-size: var(--text-xs);
-}
-
-.add-thought-btn {
-	background: var(--bg-primary);
-	border: 2px dashed var(--border-color);
-	border-radius: var(--radius-base);
-	padding: var(--space-3);
+.emotion-tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	appearance: none;
+	border: 1px solid var(--line);
+	background: rgba(26, 31, 43, 0.6);
+	color: var(--paper);
+	font-family: inherit;
+	font-size: 13px;
+	padding: 5px 9px 5px 8px;
+	border-radius: 999px;
 	cursor: pointer;
+	transition: border-color 0.2s ease;
+}
+.emotion-tag:hover {
+	border-color: rgba(226, 109, 92, 0.5);
+}
+.emotion-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+.emotion-name {
+	color: var(--paper);
+}
+.emotion-intensity {
+	font-style: normal;
+	color: var(--paper-dim);
+	font-size: 11.5px;
+}
+.emotion-x {
+	font-size: 15px;
+	color: var(--paper-dim);
+	margin-left: 1px;
+}
+.emotion-tag:hover .emotion-x {
+	color: var(--coral);
+}
+
+/* ===== Добавить мысль ===== */
+.add-thought-btn {
 	width: 100%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: var(--space-2);
-	color: var(--text-secondary);
-	font-weight: var(--font-medium);
-	transition: all var(--transition-fast) var(--ease-in-out);
+	gap: 6px;
+	appearance: none;
+	border: 1px dashed var(--line);
+	background: transparent;
+	color: var(--paper-dim);
+	font-family: inherit;
+	font-size: 14px;
+	padding: 12px;
+	border-radius: 14px;
+	cursor: pointer;
+	transition: color 0.2s ease, border-color 0.2s ease;
 }
-
+.add-thought-btn .q-icon {
+	font-size: 18px;
+}
 .add-thought-btn:hover {
-	border-color: var(--primary);
-	color: var(--primary);
-	background: var(--bg-hover);
+	color: var(--lamp);
+	border-color: rgba(240, 178, 100, 0.4);
 }
 
+/* ===== Сохранить ===== */
 .save-btn {
 	width: 100%;
-	height: 52px;
-	font-weight: var(--font-semibold);
-	margin-top: var(--space-4);
+	height: 54px;
+	border-radius: 16px;
+	font-size: 16px;
+	margin-top: 26px;
+}
+.save-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+	box-shadow: none;
 }
 
+/* ===== Загрузка ===== */
 .loading-state {
 	text-align: center;
-	padding: var(--space-8);
-	background: var(--bg-primary);
-	border-radius: var(--radius-lg);
-	box-shadow: var(--shadow-sm);
-	border: 1px solid var(--border-color);
+	padding: max(12dvh, 80px) 0;
+}
+.loading-line {
+	font-family: "Spectral", Georgia, serif;
+	font-style: italic;
+	font-size: 18px;
+	color: var(--paper-dim);
 }
 
-.loading-spinner {
-	font-size: 48px;
-	margin-bottom: var(--space-3);
-	animation: spin 2s linear infinite;
-}
-
-@keyframes spin {
+@keyframes rise {
 	from {
-		transform: rotate(0deg);
+		opacity: 0;
+		transform: translateY(12px);
 	}
 	to {
-		transform: rotate(360deg);
+		opacity: 1;
+		transform: translateY(0);
 	}
 }
 
-/* Адаптация для мобильных устройств */
-@media (max-width: 768px) {
-	.add-entry-container {
-		padding: var(--space-2);
-	}
-
-	.form-card {
-		padding: var(--space-4);
-	}
-
-	.page-title {
-		font-size: var(--text-xl);
+@media (prefers-reduced-motion: reduce) {
+	.add-entry-header,
+	.form-group {
+		animation: none;
 	}
 }
-
-/* Исправление для виртуальной клавиатуры */
-.add-entry-page {
-	height: 100vh;
-	height: 100dvh;
-	overflow-y: auto;
-	-webkit-overflow-scrolling: touch;
-	contain: layout style;
-}
-
-.add-entry-container {
-	min-height: calc(100vh - 80px);
-	min-height: calc(100dvh - 80px);
-}
-
-/* Специально для iOS - поддержка Visual Viewport API */
-@supports (height: 100dvh) {
-	.add-entry-page {
-		height: 100dvh;
-	}
-
-	.add-entry-container {
-		min-height: calc(100dvh - 80px);
-	}
-}
-
-/* Поддержка iOS safe area */
-@supports (padding: max(0px)) {
-	.add-entry-page {
-		padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
-	}
-
-	.add-entry-header {
-		padding-top: max(var(--space-3), env(safe-area-inset-top));
-	}
-}
-
-/* Темная тема - дополнительные стили для эмоций */
-@media (prefers-color-scheme: dark) {
-	.emotion-chip {
-		/* Чипы эмоций в темной теме имеют более насыщенные цвета */
-		filter: brightness(1.1);
-	}
-
-	.thought-chain {
-		background: var(--bg-tertiary);
-	}
-}
-</style> 
+</style>

@@ -105,14 +105,19 @@ watch(
 	{ immediate: true }
 );
 
-// Синхронизируем активный таб с роутом
+// Синхронизируем активный таб с роутом.
+// Имена роутов капитализированы ("Diary"), а имена табов — строчные ("diary"),
+// поэтому сравниваем без учёта регистра, иначе прямой переход/перезагрузка
+// не подсвечивает нужный таб.
 watch(
 	() => route.name,
 	(newRouteName) => {
 		if (newRouteName && typeof newRouteName === "string") {
-			const tabNames = tabs.map((tab) => tab.name);
-			if (tabNames.includes(newRouteName)) {
-				activeTab.value = newRouteName;
+			const match = tabs.find(
+				(tab) => tab.name.toLowerCase() === newRouteName.toLowerCase()
+			);
+			if (match) {
+				activeTab.value = match.name;
 			}
 		}
 	},
@@ -122,7 +127,8 @@ watch(
 watch(
 	() => activeTab.value,
 	(newActiveTab) => {
-		if (newActiveTab !== route.name) {
+		const routeName = String(route.name || "").toLowerCase();
+		if (newActiveTab.toLowerCase() !== routeName) {
 			router.push(`/${newActiveTab}`);
 		}
 	}
@@ -135,7 +141,8 @@ function handleTabChange(tab: Tab) {
 }
 
 function handleAddClick() {
-	router.push("/add-entry");
+	// Голосовой захват — основной путь создания события (СМЭР-разбор)
+	router.push("/capture");
 }
 
 // Проверяем настройки темы при загрузке приложения

@@ -1,186 +1,231 @@
 <template>
 	<div class="login-page">
-		<div class="login-container">
-			<!-- Header -->
-			<div class="login-header">
-				<div class="app-logo">🧠</div>
-				<h1 class="app-title">{{ $t("login.appTitle") }}</h1>
-				<p class="app-subtitle">
+		<main class="cover">
+			<!-- Шапка: страница дневника начинается с даты -->
+			<header class="cover-head">
+				<p class="cover-date">{{ todayLabel }}</p>
+				<h1 class="cover-title">
+					{{ isRegistering ? $t("login.creatingAccount") : $t("login.appTitle") }}
+				</h1>
+				<p class="cover-sub">
 					{{
-						isRegistering
-							? $t("login.creatingAccount")
-							: $t("login.signInTitle")
+						isRegistering ? $t("login.newDiarySub") : $t("login.signInTitle")
 					}}
 				</p>
-			</div>
+			</header>
 
-			<!-- Форма авторизации/регистрации -->
-			<div class="auth-form">
-				<div class="form-content">
-					<!-- Email -->
-					<div class="form-group">
-						<CbdInput
-							v-model="email"
-							type="email"
-							:label="$t('auth.email')"
-							:placeholder="$t('login.emailPlaceholder')"
-							icon="email"
-							:error-message="emailError"
-							@blur="validateEmail"
-							@keyup.enter="handleSubmit"
-						/>
-					</div>
+			<!-- Форма: поля как строки в тетради -->
+			<form class="cover-form" novalidate @submit.prevent="handleSubmit">
+				<label class="line-field" :class="{ 'is-invalid': emailError }">
+					<span class="line-label">{{ $t("login.emailLabel") }}</span>
+					<input
+						v-model="email"
+						type="email"
+						name="email"
+						autocomplete="email"
+						inputmode="email"
+						:placeholder="$t('login.emailPlaceholder')"
+						@blur="validateEmail"
+						@keyup.enter="handleSubmit"
+					/>
+					<span class="line-rule" aria-hidden="true"></span>
+					<span v-if="emailError" class="line-error">{{ emailError }}</span>
+				</label>
 
-					<!-- Username (только для регистрации) -->
-					<div v-if="isRegistering" class="form-group">
-						<CbdInput
-							v-model="username"
-							type="text"
-							:label="$t('login.usernameOptional')"
-							:placeholder="$t('login.usernamePlaceholder')"
-							icon="person"
-							:error-message="usernameError"
-							@blur="validateUsername"
-							@keyup.enter="handleSubmit"
-						/>
-					</div>
+				<label
+					v-if="isRegistering"
+					class="line-field"
+					:class="{ 'is-invalid': usernameError }"
+				>
+					<span class="line-label">{{ $t("login.usernameOptional") }}</span>
+					<input
+						v-model="username"
+						type="text"
+						name="name"
+						autocomplete="nickname"
+						:placeholder="$t('login.usernamePlaceholder')"
+						@blur="validateUsername"
+						@keyup.enter="handleSubmit"
+					/>
+					<span class="line-rule" aria-hidden="true"></span>
+					<span v-if="usernameError" class="line-error">{{
+						usernameError
+					}}</span>
+				</label>
 
-					<!-- Пароль -->
-					<div class="form-group">
-						<CbdInput
-							v-model="password"
-							:type="showPassword ? 'text' : 'password'"
-							:label="$t('auth.password')"
-							:placeholder="
-								isRegistering
-									? $t('login.passwordCreate')
-									: $t('login.passwordEnter')
-							"
-							icon="lock"
-							:error-message="passwordError"
-							@blur="validatePassword"
-							@keyup.enter="handleSubmit"
-						>
-							<template #append>
-								<q-btn
-									type="button"
-									@click="togglePasswordVisibility"
-									class="password-toggle-btn"
-									flat
-									round
-									dense
-									:icon="showPassword ? 'visibility_off' : 'visibility'"
-								/>
-							</template>
-						</CbdInput>
-					</div>
-
-					<!-- Подтверждение пароля (только для регистрации) -->
-					<div v-if="isRegistering" class="form-group">
-						<CbdInput
-							v-model="confirmPassword"
-							:type="showConfirmPassword ? 'text' : 'password'"
-							:label="$t('login.confirmPasswordRequired')"
-							:placeholder="$t('login.confirmPasswordRequired')"
-							icon="lock"
-							:error-message="confirmPasswordError"
-							@blur="validateConfirmPassword"
-							@keyup.enter="handleSubmit"
-						>
-							<template #append>
-								<q-btn
-									type="button"
-									@click="toggleConfirmPasswordVisibility"
-									class="password-toggle-btn"
-									flat
-									round
-									dense
-									:icon="showConfirmPassword ? 'visibility_off' : 'visibility'"
-								/>
-							</template>
-						</CbdInput>
-					</div>
-
-					<!-- Кнопка отправки -->
-					<CbdButton
-						:loading="userStore.isLoading"
-						:disabled="!isFormValid"
-						variant="primary"
-						size="lg"
-						class="submit-btn"
-						@click="handleSubmit"
-					>
-						{{
-							isRegistering ? $t("login.submitCreate") : $t("login.submitLogin")
-						}}
-					</CbdButton>
-
-					<!-- Ошибка -->
-					<div v-if="userStore.error" class="error-message">
-						{{ userStore.error }}
-					</div>
-
-					<!-- Переключение между входом и регистрацией -->
-					<div class="auth-switch">
-						<p class="switch-text">
-							{{
-								isRegistering ? $t("login.haveAccount") : $t("login.firstTime")
-							}}
-						</p>
-						<q-btn
-							type="button"
-							@click="toggleAuthMode"
-							class="switch-btn"
-							flat
-							no-caps
-						>
-							{{
-								isRegistering
-									? $t("login.switchToLogin")
-									: $t("login.switchToRegister")
-							}}
-						</q-btn>
-					</div>
-				</div>
-
-				<!-- Дополнительные ссылки -->
-				<div class="auth-footer">
-					<q-btn
-						v-if="!isRegistering"
+				<label class="line-field" :class="{ 'is-invalid': passwordError }">
+					<span class="line-label">{{ $t("login.passwordLabel") }}</span>
+					<input
+						v-model="password"
+						:type="showPassword ? 'text' : 'password'"
+						name="password"
+						:autocomplete="isRegistering ? 'new-password' : 'current-password'"
+						:placeholder="
+							isRegistering
+								? $t('login.passwordCreate')
+								: $t('login.passwordEnter')
+						"
+						@blur="validatePassword"
+						@keyup.enter="handleSubmit"
+					/>
+					<button
 						type="button"
-						@click="handleForgotPassword"
-						class="forgot-link"
-						flat
-						no-caps
+						class="eye-btn"
+						:aria-label="showPassword ? 'Скрыть пароль' : 'Показать пароль'"
+						@click="togglePasswordVisibility"
 					>
-						{{ $t("login.forgotPassword") }}
-					</q-btn>
-
-					<div class="demo-section">
-						<p class="demo-text">{{ $t("login.tryDemo") }}</p>
-						<CbdButton
-							variant="ghost"
-							size="sm"
-							@click="handleDemoLogin"
-							class="demo-btn"
+						<svg
+							v-if="!showPassword"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.6"
+							stroke-linecap="round"
+							stroke-linejoin="round"
 						>
-							{{ $t("login.loginAsDemo") }}
-						</CbdButton>
-					</div>
-				</div>
-			</div>
-		</div>
+							<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z" />
+							<circle cx="12" cy="12" r="2.8" />
+						</svg>
+						<svg
+							v-else
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.6"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z" />
+							<circle cx="12" cy="12" r="2.8" />
+							<line x1="4" y1="20" x2="20" y2="4" />
+						</svg>
+					</button>
+					<span class="line-rule" aria-hidden="true"></span>
+					<span v-if="passwordError" class="line-error">{{
+						passwordError
+					}}</span>
+				</label>
+
+				<label
+					v-if="isRegistering"
+					class="line-field"
+					:class="{ 'is-invalid': confirmPasswordError }"
+				>
+					<span class="line-label">{{ $t("login.confirmPasswordLabel") }}</span>
+					<input
+						v-model="confirmPassword"
+						:type="showConfirmPassword ? 'text' : 'password'"
+						name="confirm-password"
+						autocomplete="new-password"
+						:placeholder="$t('login.confirmPasswordPlaceholder')"
+						@blur="validateConfirmPassword"
+						@keyup.enter="handleSubmit"
+					/>
+					<button
+						type="button"
+						class="eye-btn"
+						:aria-label="
+							showConfirmPassword ? 'Скрыть пароль' : 'Показать пароль'
+						"
+						@click="toggleConfirmPasswordVisibility"
+					>
+						<svg
+							v-if="!showConfirmPassword"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.6"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z" />
+							<circle cx="12" cy="12" r="2.8" />
+						</svg>
+						<svg
+							v-else
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.6"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z" />
+							<circle cx="12" cy="12" r="2.8" />
+							<line x1="4" y1="20" x2="20" y2="4" />
+						</svg>
+					</button>
+					<span class="line-rule" aria-hidden="true"></span>
+					<span v-if="confirmPasswordError" class="line-error">{{
+						confirmPasswordError
+					}}</span>
+				</label>
+
+				<button
+					type="submit"
+					class="lamp-btn"
+					:disabled="!isFormValid || userStore.isLoading"
+				>
+					<span v-if="userStore.isLoading" class="lamp-spinner" aria-hidden="true"></span>
+					<span>{{
+						isRegistering ? $t("login.submitCreate") : $t("login.submitLogin")
+					}}</span>
+				</button>
+
+				<p v-if="userStore.error" class="form-error" role="alert">
+					{{ userStore.error }}
+				</p>
+			</form>
+
+			<!-- Низ: переключение режима, восстановление, демо -->
+			<footer class="cover-foot">
+				<p class="foot-line">
+					<span class="foot-dim">{{
+						isRegistering ? $t("login.haveAccount") : $t("login.firstTime")
+					}}</span>
+					<button type="button" class="text-btn accent" @click="toggleAuthMode">
+						{{
+							isRegistering
+								? $t("login.switchToLogin")
+								: $t("login.switchToRegister")
+						}}
+					</button>
+				</p>
+
+				<p v-if="!isRegistering" class="foot-line">
+					<button type="button" class="text-btn dim" @click="handleForgotPassword">
+						{{ $t("login.forgotPassword") }}
+					</button>
+				</p>
+
+				<p class="foot-line demo-line">
+					<button type="button" class="text-btn dim" @click="handleDemoLogin">
+						{{ $t("login.loginAsDemo") }}
+					</button>
+				</p>
+			</footer>
+		</main>
 	</div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
-import { CbdButton, CbdInput } from "../components/ui";
+import { useLocalization } from "../composables/useLocalization";
 import { useUserStore } from "../stores/user";
 
 const router = useRouter();
 const userStore = useUserStore();
+const { t } = useLocalization();
+
+// Дата прописью — страница дневника начинается с даты
+const todayLabel = computed(() =>
+	new Date().toLocaleDateString("ru-RU", {
+		weekday: "long",
+		day: "numeric",
+		month: "long",
+	})
+);
 
 // Состояние формы
 const isRegistering = ref(false);
@@ -201,10 +246,10 @@ const confirmPasswordError = ref("");
 function validateEmail() {
 	const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 	if (!email.value.trim()) {
-		emailError.value = String((<any>window).$t?.("login.emailRequired") ?? "");
+		emailError.value = String(t("login.emailRequired"));
 		return false;
 	} else if (!emailRegex.test(email.value)) {
-		emailError.value = String((<any>window).$t?.("login.emailInvalid") ?? "");
+		emailError.value = String(t("login.emailInvalid"));
 		return false;
 	} else {
 		emailError.value = "";
@@ -218,9 +263,7 @@ function validateUsername() {
 		username.value.trim() &&
 		username.value.trim().length < 2
 	) {
-		usernameError.value = String(
-			(<any>window).$t?.("login.usernameTooShort") ?? ""
-		);
+		usernameError.value = String(t("login.usernameTooShort"));
 		return false;
 	} else {
 		usernameError.value = "";
@@ -230,12 +273,10 @@ function validateUsername() {
 
 function validatePassword() {
 	if (!password.value) {
-		passwordError.value = String(
-			(<any>window).$t?.("login.passwordRequired") ?? ""
-		);
+		passwordError.value = String(t("login.passwordRequired"));
 		return false;
 	} else if (isRegistering.value && password.value.length < 6) {
-		passwordError.value = String((<any>window).$t?.("login.passwordMin") ?? "");
+		passwordError.value = String(t("login.passwordMin"));
 		return false;
 	} else {
 		passwordError.value = "";
@@ -246,14 +287,10 @@ function validatePassword() {
 function validateConfirmPassword() {
 	if (isRegistering.value) {
 		if (!confirmPassword.value) {
-			confirmPasswordError.value = String(
-				(<any>window).$t?.("login.confirmPasswordRequired") ?? ""
-			);
+			confirmPasswordError.value = String(t("login.confirmPasswordRequired"));
 			return false;
 		} else if (password.value !== confirmPassword.value) {
-			confirmPasswordError.value = String(
-				(<any>window).$t?.("login.passwordsNotMatch") ?? ""
-			);
+			confirmPasswordError.value = String(t("login.passwordsNotMatch"));
 			return false;
 		} else {
 			confirmPasswordError.value = "";
@@ -394,34 +431,320 @@ async function handleForgotPassword() {
 		"Функция восстановления пароля будет добавлена в следующих обновлениях"
 	);
 }
-
 </script>
 
 <style scoped>
+/* «Вечерний дневник»: чернильная ночь + тёплый свет лампы.
+   Палитра страницы фиксированная — это обложка, она не зависит от темы. */
 .login-page {
-	min-height: 100vh;
+	--ink: #12151d;
+	--ink-soft: #1a1f2b;
+	--paper: #ede6d6;
+	--paper-dim: #97907e;
+	--lamp: #f0b264;
+	--lamp-deep: #d99a45;
+	--coral: #e26d5c;
+
+	min-height: 100dvh;
+	display: flex;
+	justify-content: center;
+	background:
+		radial-gradient(
+			90% 48% at 88% -12%,
+			rgba(226, 166, 91, 0.13) 0%,
+			rgba(226, 166, 91, 0) 60%
+		),
+		radial-gradient(120% 100% at 50% 110%, #0d1017 0%, var(--ink) 55%);
+	color: var(--paper);
+	font-family: "Onest", system-ui, sans-serif;
+}
+
+.cover {
+	width: 100%;
+	max-width: 400px;
+	display: flex;
+	flex-direction: column;
+	padding: max(9dvh, 48px) 28px 32px;
+}
+
+/* ===== Шапка ===== */
+.cover-date {
+	font-family: "Spectral", Georgia, serif;
+	font-style: italic;
+	font-size: 15px;
+	color: var(--paper-dim);
+	margin-bottom: 14px;
+	animation: rise 0.55s ease-out both;
+}
+
+.cover-date::first-letter {
+	text-transform: uppercase;
+}
+
+.cover-title {
+	font-family: "Spectral", Georgia, serif;
+	font-weight: 500;
+	font-size: clamp(42px, 12vw, 52px);
+	line-height: 1.04;
+	letter-spacing: -0.015em;
+	margin: 0 0 10px;
+	animation: rise 0.55s ease-out 0.06s both;
+}
+
+.cover-sub {
+	font-family: "Spectral", Georgia, serif;
+	font-style: italic;
+	font-size: 19px;
+	color: var(--paper-dim);
+	margin: 0;
+	animation: rise 0.55s ease-out 0.12s both;
+}
+
+/* ===== Форма: строки тетради ===== */
+.cover-form {
+	display: flex;
+	flex-direction: column;
+	gap: 26px;
+	margin-top: max(5dvh, 32px);
+	animation: rise 0.55s ease-out 0.18s both;
+}
+
+.line-field {
+	position: relative;
+	display: block;
+}
+
+.line-label {
+	display: block;
+	font-size: 12px;
+	font-weight: 500;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--paper-dim);
+	margin-bottom: 2px;
+	transition: color 0.25s ease;
+}
+
+.line-field:focus-within .line-label {
+	color: var(--lamp);
+}
+
+.line-field input {
+	width: 100%;
+	background: transparent;
+	border: none;
+	outline: none;
+	padding: 8px 36px 9px 0;
+	font-family: inherit;
+	font-size: 17px;
+	color: var(--paper);
+	caret-color: var(--lamp);
+	border-radius: 0;
+}
+
+.line-field input::placeholder {
+	color: rgba(151, 144, 126, 0.55);
+}
+
+/* Автозаполнение Chrome: не давать ему красить текст чёрным и заливать фон */
+.line-field input:-webkit-autofill,
+.line-field input:-webkit-autofill:hover,
+.line-field input:-webkit-autofill:focus,
+.line-field input:-webkit-autofill:active {
+	-webkit-text-fill-color: var(--paper);
+	caret-color: var(--lamp);
+	-webkit-box-shadow: 0 0 0 1000px transparent inset;
+	transition: background-color 9999s ease-in-out 0s;
+}
+
+/* Строка тетради: тонкая линия, при фокусе «зажигается» слева направо */
+.line-rule {
+	display: block;
+	height: 1px;
+	background: rgba(237, 230, 214, 0.18);
+	position: relative;
+	overflow: hidden;
+}
+
+.line-rule::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: var(--lamp);
+	transform: scaleX(0);
+	transform-origin: left;
+	transition: transform 0.35s ease;
+}
+
+.line-field:focus-within .line-rule::after {
+	transform: scaleX(1);
+}
+
+.line-field.is-invalid .line-rule {
+	background: rgba(226, 109, 92, 0.55);
+}
+
+.line-field.is-invalid .line-rule::after {
+	background: var(--coral);
+}
+
+.line-error {
+	display: block;
+	font-size: 12.5px;
+	color: var(--coral);
+	margin-top: 7px;
+}
+
+.eye-btn {
+	position: absolute;
+	right: 0;
+	bottom: 9px;
+	width: 30px;
+	height: 30px;
+	padding: 4px;
+	background: none;
+	border: none;
+	color: var(--paper-dim);
+	cursor: pointer;
+	transition: color 0.2s ease;
+}
+
+.eye-btn:hover,
+.eye-btn:focus-visible {
+	color: var(--paper);
+}
+
+.eye-btn svg {
+	width: 100%;
+	height: 100%;
+}
+
+/* ===== Кнопка-лампа ===== */
+.lamp-btn {
+	margin-top: 14px;
+	width: 100%;
+	height: 56px;
+	border: none;
+	border-radius: 14px;
+	background: var(--lamp);
+	color: #181203;
+	font-family: inherit;
+	font-size: 16.5px;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	cursor: pointer;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: linear-gradient(
-		135deg,
-		var(--bg-secondary) 0%,
-		var(--bg-primary) 100%
-	);
-	padding: var(--space-4);
-	transition: background-color var(--transition-base) var(--ease-in-out);
+	gap: 10px;
+	box-shadow: 0 14px 36px rgba(226, 166, 91, 0.22);
+	transition:
+		background 0.2s ease,
+		transform 0.15s ease,
+		box-shadow 0.2s ease,
+		opacity 0.2s ease;
 }
 
-.login-container {
-	width: 100%;
-	max-width: 420px;
-	animation: slideUp 0.6s ease-out;
+.lamp-btn:hover:not(:disabled) {
+	background: var(--lamp-deep);
 }
 
-@keyframes slideUp {
+.lamp-btn:active:not(:disabled) {
+	transform: translateY(1px);
+	box-shadow: 0 8px 22px rgba(226, 166, 91, 0.18);
+}
+
+.lamp-btn:disabled {
+	opacity: 0.4;
+	cursor: default;
+	box-shadow: none;
+}
+
+.lamp-btn:focus-visible {
+	outline: 2px solid var(--paper);
+	outline-offset: 3px;
+}
+
+.lamp-spinner {
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	border: 2px solid rgba(24, 18, 3, 0.3);
+	border-top-color: #181203;
+	animation: spin 0.7s linear infinite;
+}
+
+.form-error {
+	margin: 4px 0 0;
+	font-size: 13.5px;
+	line-height: 1.45;
+	color: var(--coral);
+}
+
+/* ===== Низ ===== */
+.cover-foot {
+	margin-top: max(6dvh, 40px);
+	display: flex;
+	flex-direction: column;
+	gap: 13px;
+	animation: rise 0.55s ease-out 0.24s both;
+}
+
+.foot-line {
+	margin: 0;
+	font-size: 14.5px;
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.foot-dim {
+	color: var(--paper-dim);
+}
+
+.text-btn {
+	background: none;
+	border: none;
+	padding: 0;
+	font-family: inherit;
+	font-size: inherit;
+	cursor: pointer;
+	transition: color 0.2s ease;
+}
+
+.text-btn.accent {
+	color: var(--lamp);
+	font-weight: 500;
+}
+
+.text-btn.accent:hover {
+	color: var(--lamp-deep);
+}
+
+.text-btn.dim {
+	color: var(--paper-dim);
+}
+
+.text-btn.dim:hover {
+	color: var(--paper);
+}
+
+.text-btn:focus-visible {
+	outline: 2px solid var(--lamp);
+	outline-offset: 3px;
+	border-radius: 3px;
+}
+
+.demo-line {
+	padding-top: 11px;
+	border-top: 1px solid rgba(237, 230, 214, 0.1);
+}
+
+/* ===== Анимации ===== */
+@keyframes rise {
 	from {
 		opacity: 0;
-		transform: translateY(30px);
+		transform: translateY(14px);
 	}
 	to {
 		opacity: 1;
@@ -429,304 +752,31 @@ async function handleForgotPassword() {
 	}
 }
 
-.login-header {
-	text-align: center;
-	margin-bottom: var(--space-8);
-}
-
-.app-logo {
-	width: 80px;
-	height: 80px;
-	margin: 0 auto var(--space-4);
-	background: linear-gradient(135deg, var(--primary), var(--primary-hover));
-	border-radius: var(--radius-2xl);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: var(--text-inverse);
-	font-size: var(--text-4xl);
-	font-weight: var(--font-bold);
-	box-shadow: var(--shadow-lg);
-	animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-	0%,
-	100% {
-		transform: scale(1);
-		box-shadow: var(--shadow-lg);
-	}
-	50% {
-		transform: scale(1.05);
-		box-shadow: 0 20px 40px rgba(96, 165, 250, 0.3);
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
 	}
 }
 
-.app-title {
-	font-size: var(--text-3xl);
-	font-weight: var(--font-bold);
-	color: var(--text-primary);
-	margin-bottom: var(--space-2);
-	background: linear-gradient(135deg, var(--primary), var(--primary-hover));
-	-webkit-background-clip: text;
-	-webkit-text-fill-color: transparent;
-	background-clip: text;
-}
-
-.app-subtitle {
-	font-size: var(--text-base);
-	color: var(--text-secondary);
-	font-weight: var(--font-medium);
-}
-
-.auth-form {
-	background: var(--bg-primary);
-	border-radius: var(--radius-xl);
-	padding: var(--space-8);
-	box-shadow: var(--shadow-xl);
-	border: 1px solid var(--border-color);
-	backdrop-filter: blur(10px);
-}
-
-.form-content {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-4);
-}
-
-.form-group {
-	position: relative;
-}
-
-.password-toggle-btn {
-	background: none;
-	border: none;
-	color: var(--text-secondary);
-	cursor: pointer;
-	padding: var(--space-1);
-	border-radius: var(--radius-sm);
-	transition: all var(--transition-fast) var(--ease-in-out);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.password-toggle-btn:hover {
-	color: var(--primary);
-	background: var(--bg-hover);
-}
-
-.submit-btn {
-	width: 100%;
-	height: 52px;
-	font-weight: var(--font-semibold);
-	margin-top: var(--space-2);
-	border-radius: var(--radius-lg);
-	transition: all var(--transition-base) var(--ease-in-out);
-}
-
-.submit-btn:hover:not(:disabled) {
-	transform: translateY(-2px);
-	box-shadow: var(--shadow-lg);
-}
-
-.submit-btn:active:not(:disabled) {
-	transform: translateY(0);
-}
-
-.error-message {
-	background: rgba(239, 68, 68, 0.1);
-	border: 1px solid rgba(239, 68, 68, 0.2);
-	color: var(--error);
-	padding: var(--space-3);
-	border-radius: var(--radius-base);
-	font-size: var(--text-sm);
-	text-align: center;
-	animation: shake 0.5s ease-in-out;
-}
-
-@keyframes shake {
-	0%,
-	100% {
-		transform: translateX(0);
-	}
-	10%,
-	30%,
-	50%,
-	70%,
-	90% {
-		transform: translateX(-5px);
-	}
-	20%,
-	40%,
-	60%,
-	80% {
-		transform: translateX(5px);
+@media (prefers-reduced-motion: reduce) {
+	.cover-date,
+	.cover-title,
+	.cover-sub,
+	.cover-form,
+	.cover-foot {
+		animation: none;
 	}
 }
 
-.auth-switch {
-	text-align: center;
-	margin-top: var(--space-6);
-	padding-top: var(--space-6);
-	border-top: 1px solid var(--border-color);
-}
-
-.switch-text {
-	color: var(--text-secondary);
-	margin-bottom: var(--space-2);
-	font-size: var(--text-sm);
-}
-
-.switch-btn {
-	background: none;
-	border: none;
-	color: var(--primary);
-	font-weight: var(--font-semibold);
-	cursor: pointer;
-	text-decoration: underline;
-	transition: all var(--transition-fast) var(--ease-in-out);
-	font-size: var(--text-sm);
-}
-
-.switch-btn:hover {
-	color: var(--primary-hover);
-}
-
-.oauth-section {
-	margin-top: var(--space-6);
-}
-
-.oauth-divider {
-	display: flex;
-	align-items: center;
-	margin: var(--space-6) 0 var(--space-4);
-	color: var(--text-tertiary);
-	font-size: var(--text-sm);
-}
-
-.oauth-divider::before,
-.oauth-divider::after {
-	content: "";
-	flex: 1;
-	height: 1px;
-	background: var(--border-color);
-}
-
-.oauth-divider span {
-	padding: 0 var(--space-4);
-}
-
-.oauth-buttons {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: var(--space-3);
-}
-
-.oauth-btn {
-	border: 1px solid var(--border-color);
-	transition: all var(--transition-fast) var(--ease-in-out);
-}
-
-.oauth-btn:hover {
-	border-color: var(--primary);
-	transform: translateY(-1px);
-}
-
-.auth-footer {
-	margin-top: var(--space-6);
-	text-align: center;
-}
-
-.forgot-link {
-	background: none;
-	border: none;
-	color: var(--primary);
-	font-size: var(--text-sm);
-	text-decoration: underline;
-	cursor: pointer;
-	margin-bottom: var(--space-4);
-	transition: color var(--transition-fast) var(--ease-in-out);
-}
-
-.forgot-link:hover {
-	color: var(--primary-hover);
-}
-
-.demo-section {
-	padding-top: var(--space-4);
-	border-top: 1px solid var(--border-color);
-}
-
-.demo-text {
-	color: var(--text-secondary);
-	font-size: var(--text-sm);
-	margin-bottom: var(--space-3);
-}
-
-.demo-btn {
-	font-size: var(--text-sm);
-	border: 1px dashed var(--border-color);
-	transition: all var(--transition-fast) var(--ease-in-out);
-}
-
-.demo-btn:hover {
-	border-color: var(--primary);
-	color: var(--primary);
-	background: var(--bg-hover);
-}
-
-/* Адаптация для мобильных устройств */
-@media (max-width: 768px) {
-	.login-page {
-		padding: var(--space-2);
+/* Невысокие экраны: ужимаем дыхание, чтобы не скроллило */
+@media (max-height: 700px) {
+	.cover {
+		padding-top: 36px;
 	}
 
-	.login-container {
-		max-width: 100%;
-	}
-
-	.auth-form {
-		padding: var(--space-6);
-	}
-
-	.app-title {
-		font-size: var(--text-2xl);
-	}
-
-	.oauth-buttons {
-		grid-template-columns: 1fr;
+	.cover-form {
+		margin-top: 24px;
+		gap: 20px;
 	}
 }
-
-/* Темная тема */
-@media (prefers-color-scheme: dark) {
-	.auth-form {
-		backdrop-filter: blur(10px);
-		background: rgba(var(--bg-primary-rgb), 0.8);
-	}
-
-	.app-logo {
-		box-shadow: 0 0 30px rgba(96, 165, 250, 0.3);
-	}
-}
-
-/* Исправление для поддержки CSS переменных в градиентах */
-.app-title {
-	background: var(--primary);
-	-webkit-background-clip: text;
-	-webkit-text-fill-color: transparent;
-	background-clip: text;
-}
-
-@supports (
-	background: linear-gradient(135deg, var(--primary), var(--primary-hover))
-) {
-	.app-title {
-		background: linear-gradient(135deg, var(--primary), var(--primary-hover));
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
-	}
-}
-</style> 
+</style>

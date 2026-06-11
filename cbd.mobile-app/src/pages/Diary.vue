@@ -1,201 +1,168 @@
 <template>
-	<div class="diary-page">
-		<div class="diary-container">
-			<!-- Header -->
-			<div class="diary-header">
-				<h1 class="page-title">{{ t("diary.title", "Мой дневник") }}</h1>
-				<CbdButton
-					variant="primary"
-					size="sm"
-					icon="add"
-					@click="$router.push('/add-entry')"
-				>
-					{{ t("diary.add", "Добавить") }}
-				</CbdButton>
+	<div class="diary-page diary-theme">
+		<div class="diary-inner">
+			<!-- Шапка -->
+			<header class="diary-head">
+				<h1 class="diary-title">{{ t("diary.title", "Дневник") }}</h1>
+				<span class="diary-count" v-if="cbtStore.entries.length">
+					{{ cbtStore.entries.length }}
+					{{ pluralize(cbtStore.entries.length, ["запись", "записи", "записей"]) }}
+				</span>
+			</header>
+
+			<!-- Поиск: строка тетради -->
+			<div class="line-field search-field" :class="{ 'has-value': query }">
+				<q-icon name="search" class="search-ic" />
+				<input
+					v-model="query"
+					type="text"
+					:placeholder="t('diary.searchPlaceholder', 'Поиск: мысли, эмоции, ситуации')"
+				/>
+				<button v-if="query" class="clear-btn" @click="query = ''" aria-label="Очистить">
+					×
+				</button>
+				<span class="line-rule"></span>
 			</div>
 
-			<!-- Поиск и сортировка -->
-			<div class="filters">
-				<q-input
-					v-model="query"
-					:placeholder="
-						t('diary.searchPlaceholder', 'Поиск: мысли, эмоции, ситуации')
-					"
-					outlined
-					dense
-					clearable
-					class="q-mb-sm"
+			<!-- Фильтры по дате -->
+			<div class="filter-row">
+				<button
+					v-for="f in dateFilters"
+					:key="f.value"
+					class="filter-chip"
+					:class="{ active: activeFilter === f.value }"
+					@click="activeFilter = f.value"
 				>
-					<template #prepend>
-						<q-icon name="search" />
-					</template>
-				</q-input>
+					{{ f.label }}
+				</button>
+			</div>
 
-				<div class="filter-tabs">
-					<q-btn-toggle
-						v-model="activeFilter"
-						:options="dateFilters"
-						color="primary"
-						text-color="white"
-						unelevated
-						class="full-width filter-tabs-bar"
-					/>
-				</div>
-
-				<div class="sort-row">
-					<q-select
-						v-model="sortBy"
-						:options="sortOptions"
-						:label="t('diary.sortBy', 'Сортировать по')"
-						outlined
-						dense
-					/>
+			<!-- Сортировка -->
+			<div class="sort-row" v-if="cbtStore.entries.length > 1">
+				<span class="sort-label">{{ t("diary.sortBy", "Сортировка") }}</span>
+				<div class="select-wrap">
+					<select v-model="sortBy">
+						<option v-for="o in sortOptions" :key="o.value" :value="o.value">
+							{{ o.label }}
+						</option>
+					</select>
+					<q-icon name="expand_more" class="select-ic" />
 				</div>
 			</div>
 
 			<!-- Записи -->
-			<div class="entries-list" v-if="filteredEntries.length > 0">
-				<div
+			<ul class="entries" v-if="filteredEntries.length > 0">
+				<li
 					v-for="entry in filteredEntries"
 					:key="entry.id"
-					class="entry-card"
-					:class="{ 'entry-card--expanded': expandedEntries.has(entry.id) }"
+					class="page-card"
+					:class="{ expanded: expandedEntries.has(entry.id) }"
 				>
-					<!-- Свернутое состояние -->
-					<div class="entry-compact" @click="toggleEntry(entry.id)">
-						<div class="entry-compact-header">
-							<div class="entry-time">
-								{{ formatTime(getEntryCreatedAt(entry)) }}
-							</div>
-							<div class="entry-actions">
-								<q-btn
-									class="expand-btn"
-									flat
-									round
-									:icon="
-										expandedEntries.has(entry.id)
-											? 'expand_less'
-											: 'expand_more'
-									"
-								/>
-							</div>
-						</div>
-						<div class="entry-compact-content">
-							<div class="entry-situation-preview">
-								{{ getSituationPreview(entry) }}
-							</div>
-							<div
-								v-if="!expandedEntries.has(entry.id)"
-								class="entry-emotions-compact"
-							>
-								<q-chip
-									v-for="emotion in getEntryEmotions(entry)"
-									:key="emotion.id"
-									:color="getEmotionChipColor(emotion.id)"
-									text-color="white"
-									size="sm"
-									class="emotion-chip-compact"
-								>
-									{{ emotion.name }}
-								</q-chip>
-							</div>
-						</div>
-					</div>
+					<button class="page-head" @click="toggleEntry(entry.id)">
+						<span class="page-time">{{ formatTime(getEntryCreatedAt(entry)) }}</span>
+						<q-icon
+							:name="expandedEntries.has(entry.id) ? 'expand_less' : 'expand_more'"
+							class="chevron"
+						/>
+					</button>
 
-					<!-- Развернутое состояние -->
-					<div v-if="expandedEntries.has(entry.id)" class="entry-expanded">
-						<div class="entry-detailed">
-							<div class="entry-section" v-if="getEntryData(entry).situation">
-								<h4 class="section-title">
-									{{ t("entry.situation", "Ситуация") }}
-								</h4>
-								<p class="section-content">
-									{{ getEntryData(entry).situation }}
-								</p>
-							</div>
-
-							<div
-								class="entry-section"
-								v-if="getEntryData(entry).thoughts.length > 0"
-							>
-								<h4 class="section-title">
-									{{ t("diary.thoughtsAndEmotions", "Мысли и эмоции") }}
-								</h4>
-								<div
-									v-for="(thought, index) in getEntryData(entry).thoughts"
-									:key="index"
-									class="thought-block"
-								>
-									<div class="thought-text">
-										<strong>{{ index + 1 }}.</strong> {{ thought.text }}
-									</div>
-									<div class="thought-emotions">
-										<q-chip
-											v-for="emotion in thought.emotions"
-											:key="emotion.name"
-											:color="getEmotionChipColor(emotion.id || 1)"
-											text-color="white"
-											size="sm"
-											class="emotion-chip-detailed"
-										>
-											{{ emotion.name }} ({{ emotion.intensity }}/10)
-										</q-chip>
-									</div>
-								</div>
-							</div>
-
-							<div class="entry-section" v-if="getEntryData(entry).reactions">
-								<h4 class="section-title">
-									{{ t("diary.reactions", "Реакции и действия") }}
-								</h4>
-								<p class="section-content">
-									{{ getEntryData(entry).reactions }}
-								</p>
-							</div>
-
-							<div class="entry-actions-expanded">
-								<q-btn
-									class="ai-chat-btn"
-									:class="{
-										'ai-chat-btn--filled': !!getEntryData(entry).chatId,
-									}"
-									@click="onChatClick(entry)"
-									flat
-									icon="psychology"
-								>
-									{{
-										getEntryData(entry).chatId
-											? t("diary.goToChat", "Перейти в чат")
-											: t("diary.aiChat", "Начать чат с нейросетью")
-									}}
-								</q-btn>
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			<!-- Пустое состояние -->
-			<div v-else class="empty-state">
-				<div class="empty-icon">📝</div>
-				<h3 class="empty-title">
-					{{ t("diary.emptyTitle", "Пока нет записей") }}
-				</h3>
-				<p class="empty-text">
+					<p class="page-situation">
 					{{
-						t(
-							"diary.emptyText",
-							"Начните отслеживать свои эмоции, добавив первую запись"
-						)
+						expandedEntries.has(entry.id)
+							? entry.situation || t("common.noDescription", "Без описания")
+							: getSituationPreview(entry)
 					}}
 				</p>
-				<CbdButton
-					variant="primary"
-					size="lg"
-					@click="$router.push('/add-entry')"
-				>
-					{{ t("diary.addEntry", "Добавить запись") }}
-				</CbdButton>
+
+					<!-- Свёрнуто: ink-теги эмоций -->
+					<div
+						v-if="!expandedEntries.has(entry.id)"
+						class="ink-tags"
+						v-show="getEntryEmotions(entry).length"
+					>
+						<span
+							v-for="emotion in getEntryEmotions(entry)"
+							:key="emotion.id"
+							class="ink-tag"
+						>
+							<i class="ink-dot" :style="{ background: getEmotionDotColor(emotion.id) }"></i>
+							{{ emotion.name }}
+						</span>
+					</div>
+
+					<!-- Развёрнуто -->
+					<div v-if="expandedEntries.has(entry.id)" class="page-detail">
+						<section
+							class="detail-section"
+							v-if="getEntryData(entry).thoughts.length > 0"
+						>
+							<h4 class="detail-label">
+								{{ t("diary.thoughtsAndEmotions", "Мысли и эмоции") }}
+							</h4>
+							<div
+								v-for="(thought, index) in getEntryData(entry).thoughts"
+								:key="index"
+								class="thought"
+							>
+								<p class="thought-text">
+									<b>{{ index + 1 }}.</b> {{ thought.text }}
+								</p>
+								<div class="ink-tags" v-show="thought.emotions.length">
+									<span
+										v-for="emotion in thought.emotions"
+										:key="emotion.name"
+										class="ink-tag"
+									>
+										<i
+											class="ink-dot"
+											:style="{ background: getEmotionDotColor(emotion.id || 1) }"
+										></i>
+										{{ emotion.name }}
+										<em class="ink-intensity">{{ emotion.intensity }}/10</em>
+									</span>
+								</div>
+							</div>
+						</section>
+
+						<section class="detail-section" v-if="getEntryData(entry).reactions">
+							<h4 class="detail-label">
+								{{ t("diary.reactions", "Реакции и действия") }}
+							</h4>
+							<p class="detail-text">{{ getEntryData(entry).reactions }}</p>
+						</section>
+
+						<button
+							class="chat-btn"
+							:class="{ filled: !!getEntryData(entry).chatId }"
+							@click="onChatClick(entry)"
+						>
+							<q-icon name="psychology" />
+							{{
+								getEntryData(entry).chatId
+									? t("diary.goToChat", "Перейти в чат")
+									: t("diary.aiChat", "Разобрать с нейросетью")
+							}}
+						</button>
+					</div>
+				</li>
+			</ul>
+
+			<!-- Пусто -->
+			<div v-else class="diary-empty">
+				<p class="empty-line">
+					{{
+						query || activeFilter !== "all"
+							? t("diary.emptyFiltered", "Ничего не нашлось")
+							: t("diary.emptyTitle", "Пока нет записей")
+					}}
+				</p>
+				<p class="empty-sub">
+					{{
+						query || activeFilter !== "all"
+							? t("diary.emptyFilteredSub", "Попробуйте изменить поиск или фильтр")
+							: t("diary.emptyText", "Начните с записи момента, который сегодня зацепил")
+					}}
+				</p>
 			</div>
 		</div>
 	</div>
@@ -204,7 +171,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { CbdButton } from "../components/ui";
 import { useLocalization } from "../composables/useLocalization";
 import { chatService } from "../services/api";
 import { useCBTStore } from "../stores/cbt";
@@ -361,46 +327,13 @@ async function hydrateChatFlags(limit: number = 30) {
 	}
 }
 
-// function getEmotionEmoji(emotionId: number): string {
-// 	return emotionsStore.getEmotionEmoji(emotionId);
-// }
-
-// function getEmotionName(emotionId: number): string {
-// 	return emotionsStore.getEmotionName(emotionId);
-// }
-
-// function formatDate(dateStr: string): string {
-// 	const date = new Date(dateStr);
-// 	const now = new Date();
-// 	const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-// 	const entryDate = new Date(
-// 		date.getFullYear(),
-// 		date.getMonth(),
-// 		date.getDate()
-// 	);
-
-// 	if (entryDate.getTime() === today.getTime()) {
-// 		return `Сегодня, ${date.toLocaleTimeString("ru-RU", {
-// 			hour: "2-digit",
-// 			minute: "2-digit",
-// 		})}`;
-// 	}
-
-// 	const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-// 	if (entryDate.getTime() === yesterday.getTime()) {
-// 		return `Вчера, ${date.toLocaleTimeString("ru-RU", {
-// 			hour: "2-digit",
-// 			minute: "2-digit",
-// 		})}`;
-// 	}
-
-// 	return date.toLocaleDateString("ru-RU", {
-// 		day: "numeric",
-// 		month: "short",
-// 		hour: "2-digit",
-// 		minute: "2-digit",
-// 	});
-// }
+function pluralize(n: number, forms: [string, string, string]): string {
+	const mod10 = n % 10;
+	const mod100 = n % 100;
+	if (mod10 === 1 && mod100 !== 11) return forms[0];
+	if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return forms[1];
+	return forms[2];
+}
 
 function toggleEntry(entryId: string) {
 	if (expandedEntries.value.has(entryId)) {
@@ -421,19 +354,19 @@ function formatTime(dateStr: string): string {
 	);
 
 	if (entryDate.getTime() === today.getTime()) {
-		return date.toLocaleTimeString(undefined, {
+		return `${t("common.today", "Сегодня")}, ${date.toLocaleTimeString(undefined, {
 			hour: "2-digit",
 			minute: "2-digit",
-		});
+		})}`;
 	}
 	const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
 	if (entryDate.getTime() === yesterday.getTime()) {
-		return `${t("common.yesterday", "Вчера")} ${date.toLocaleTimeString(
+		return `${t("common.yesterday", "Вчера")}, ${date.toLocaleTimeString(
 			undefined,
 			{ hour: "2-digit", minute: "2-digit" }
 		)}`;
 	}
-	return date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+	return date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
 }
 
 function getEntryCreatedAt(entry: any): string {
@@ -467,23 +400,13 @@ function getEntryEmotions(entry: any): Array<{ id: number; name: string }> {
 	return emotions;
 }
 
-function getEmotionChipColor(emotionId: number): string {
+function getEmotionDotColor(emotionId: number): string {
 	const emotion = emotionsStore.getEmotionById(emotionId);
-	if (!emotion) return "blue";
-
-	// Простая логика цветов по category_id/categoryId
-	const colorMap: Record<number, string> = {
-		1: "red", // Гнев
-		2: "teal", // Страх
-		3: "blue", // Грусть
-		4: "green", // Радость
-		5: "purple", // Любовь
-	};
-
-	return (
-		colorMap[(emotion as any).categoryId || (emotion as any).category_id] ||
-		"primary"
+	if (!emotion) return "var(--lamp)";
+	const category = emotionsStore.getCategoryById(
+		(emotion as any).categoryId ?? (emotion as any).category_id
 	);
+	return (category as any)?.color || "var(--lamp)";
 }
 
 function getEntryData(entry: any) {
@@ -542,8 +465,10 @@ function getSituationPreview(entry: any): string {
 	if (!entry.situation)
 		return String(t("common.noDescription", "Без описания"));
 
-	const words = entry.situation.split(" ").slice(0, 3);
-	return words.length >= 3 ? words.join(" ") + "..." : entry.situation;
+	const max = 90;
+	return entry.situation.length <= max
+		? entry.situation
+		: entry.situation.slice(0, max) + "…";
 }
 
 // Автообновление при возврате на страницу
@@ -564,352 +489,412 @@ onMounted(() => {
 });
 </script>
 
-<style lang="scss" scoped>
+<style scoped>
 .diary-page {
-	min-height: 100vh;
-	background: var(--bg-secondary);
-	padding-bottom: 80px;
-	transition: background-color var(--transition-base) var(--ease-in-out);
+	padding-bottom: 96px;
 }
 
-.diary-container {
-	max-width: 500px;
+.diary-inner {
+	width: 100%;
+	max-width: 440px;
 	margin: 0 auto;
-	padding: var(--space-4);
+	padding: max(6dvh, 36px) 24px 24px;
 }
 
-.diary-header {
+/* ===== Шапка ===== */
+.diary-head {
 	display: flex;
+	align-items: baseline;
 	justify-content: space-between;
-	align-items: center;
-	margin-bottom: var(--space-6);
+	gap: 12px;
+	margin-bottom: 22px;
+	animation: rise 0.5s ease-out both;
 }
 
-.page-title {
-	font-size: var(--text-3xl);
-	font-weight: var(--font-bold);
-	color: var(--text-primary);
-}
-
-.filters {
-	margin-bottom: var(--space-6);
-}
-
-.filter-tabs {
-	display: flex;
-	background: var(--bg-primary);
-	border-radius: var(--radius-lg);
-	padding: var(--space-1);
-	box-shadow: var(--shadow-sm);
-	border: 1px solid var(--border-color);
-}
-
-.filter-tab {
-	flex: 1;
-	padding: var(--space-2) var(--space-3);
-	border: none;
-	background: transparent;
-	color: var(--text-secondary);
-	font-size: var(--text-sm);
-	font-weight: var(--font-medium);
-	border-radius: var(--radius-base);
-	cursor: pointer;
-	transition: all var(--transition-fast) var(--ease-in-out);
-}
-
-.filter-tab:hover {
-	color: var(--text-primary);
-	background: var(--bg-hover);
-}
-
-.filter-tab--active {
-	background: var(--primary);
-	color: var(--text-inverse);
-}
-
-.filter-tab--active:hover {
-	background: var(--primary-hover);
-}
-
-.entries-list {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-3);
-}
-
-.entry-card {
-	background: var(--bg-primary);
-	border-radius: var(--radius-lg);
-	box-shadow: var(--shadow-sm);
-	transition: all var(--transition-base) var(--ease-out);
-	overflow: hidden;
-	border: 1px solid var(--border-color);
-}
-
-.entry-card:hover {
-	transform: translateY(-2px);
-	box-shadow: var(--shadow-md);
-	border-color: var(--primary);
-}
-
-.entry-card--expanded {
-	box-shadow: var(--shadow-lg);
-	border-color: var(--primary);
-}
-
-/* Свернутое состояние */
-.entry-compact {
-	padding: var(--space-4);
-	cursor: pointer;
-	transition: background-color var(--transition-fast) var(--ease-in-out);
-}
-
-.entry-compact:hover {
-	background: var(--bg-hover);
-}
-
-.entry-compact-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: var(--space-3);
-}
-
-.entry-time {
-	font-size: var(--text-sm);
-	font-weight: var(--font-medium);
-	color: var(--text-primary);
-}
-
-.entry-actions {
-	display: flex;
-	align-items: center;
-	gap: var(--space-2);
-}
-
-.expand-btn {
-	border: none;
-	background: transparent;
-	color: var(--text-secondary);
-	cursor: pointer;
-	padding: var(--space-1);
-	border-radius: var(--radius-full);
-	transition: all var(--transition-fast) var(--ease-in-out);
-}
-
-.expand-btn:hover {
-	background: var(--bg-active);
-	color: var(--text-primary);
-}
-
-.entry-compact-content {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-2);
-}
-
-.entry-situation-preview {
-	font-size: var(--text-base);
-	color: var(--text-primary);
-	font-weight: var(--font-medium);
-	line-height: var(--leading-normal);
-}
-
-.entry-emotions-compact {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-1);
-}
-
-.emotion-chip-compact {
-	font-size: var(--text-xs) !important;
-	height: 24px !important;
-	padding: 0 var(--space-2) !important;
-	box-shadow: var(--shadow-xs);
-	transition: all var(--transition-fast) var(--ease-in-out);
-}
-
-.emotion-chip-compact:hover {
-	transform: translateY(-1px);
-	box-shadow: var(--shadow-sm);
-}
-
-/* Развернутое состояние */
-.entry-expanded {
-	border-top: 1px solid var(--border-color);
-	background: var(--bg-secondary);
-}
-
-.entry-detailed {
-	padding: var(--space-4);
-}
-
-.entry-section {
-	margin-bottom: var(--space-4);
-}
-
-.entry-section:last-of-type {
-	margin-bottom: 0;
-}
-
-.section-title {
-	font-size: var(--text-xs);
-	font-weight: var(--font-semibold);
-	color: var(--text-secondary);
-	text-transform: uppercase;
-	letter-spacing: 0.5px;
-	margin-bottom: var(--space-2);
-}
-
-.section-content {
-	font-size: var(--text-base);
-	color: var(--text-primary);
-	line-height: var(--leading-relaxed);
+.diary-title {
+	font-family: "Spectral", Georgia, serif;
+	font-weight: 500;
+	font-size: clamp(30px, 9vw, 38px);
+	letter-spacing: -0.015em;
 	margin: 0;
 }
 
-.thought-block {
-	margin-bottom: var(--space-3);
-	padding: var(--space-3);
-	background: var(--bg-primary);
-	border-radius: var(--radius-base);
-	border: 1px solid var(--border-color);
+.diary-count {
+	font-size: 13px;
+	color: var(--paper-dim);
+	white-space: nowrap;
 }
 
-.thought-block:last-child {
+/* ===== Поиск: строка тетради ===== */
+.search-field {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 20px;
+	animation: rise 0.5s ease-out 0.05s both;
+}
+
+.search-ic {
+	font-size: 20px;
+	color: var(--paper-dim);
+	flex-shrink: 0;
+}
+
+.search-field input {
+	flex: 1;
+	min-width: 0;
+	background: transparent;
+	border: none;
+	outline: none;
+	padding: 9px 0;
+	color: var(--paper);
+	font-family: inherit;
+	font-size: 16px;
+	caret-color: var(--lamp);
+}
+.search-field input::placeholder {
+	color: rgba(151, 144, 126, 0.55);
+}
+
+.clear-btn {
+	flex-shrink: 0;
+	width: 26px;
+	height: 26px;
+	border: none;
+	background: rgba(237, 230, 214, 0.08);
+	color: var(--paper-dim);
+	border-radius: 50%;
+	font-size: 18px;
+	line-height: 1;
+	cursor: pointer;
+}
+.clear-btn:hover {
+	color: var(--paper);
+}
+
+.line-rule {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 1px;
+	background: var(--line);
+}
+.line-rule::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: var(--lamp);
+	transform: scaleX(0);
+	transform-origin: left;
+	transition: transform 0.35s ease;
+}
+.search-field:focus-within .line-rule::after {
+	transform: scaleX(1);
+}
+
+/* ===== Фильтры ===== */
+.filter-row {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 16px;
+	animation: rise 0.5s ease-out 0.1s both;
+}
+
+.filter-chip {
+	flex: 1;
+	appearance: none;
+	border: 1px solid var(--line);
+	background: transparent;
+	color: var(--paper-dim);
+	font-family: inherit;
+	font-size: 13.5px;
+	padding: 8px 4px;
+	border-radius: 999px;
+	cursor: pointer;
+	transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.filter-chip:hover {
+	color: var(--paper);
+}
+.filter-chip.active {
+	color: var(--lamp);
+	border-color: rgba(240, 178, 100, 0.55);
+	background: rgba(240, 178, 100, 0.08);
+}
+
+/* ===== Сортировка ===== */
+.sort-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 22px;
+	animation: rise 0.5s ease-out 0.14s both;
+}
+.sort-label {
+	font-size: 12px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--paper-dim);
+}
+.select-wrap {
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+.select-wrap select {
+	appearance: none;
+	-webkit-appearance: none;
+	background: rgba(26, 31, 43, 0.6);
+	border: 1px solid var(--line);
+	color: var(--paper);
+	font-family: inherit;
+	font-size: 13.5px;
+	padding: 8px 32px 8px 13px;
+	border-radius: 10px;
+	cursor: pointer;
+	outline: none;
+}
+.select-wrap select:focus {
+	border-color: rgba(240, 178, 100, 0.55);
+}
+.select-wrap select option {
+	background: #161a24;
+	color: var(--paper);
+}
+.select-ic {
+	position: absolute;
+	right: 8px;
+	font-size: 18px;
+	color: var(--paper-dim);
+	pointer-events: none;
+}
+
+/* ===== Записи ===== */
+.entries {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	animation: rise 0.5s ease-out 0.18s both;
+}
+
+.page-card {
+	background: rgba(26, 31, 43, 0.6);
+	border: 1px solid var(--line);
+	border-radius: 16px;
+	padding: 15px 18px;
+	transition: border-color 0.2s ease, background 0.2s ease;
+}
+.page-card.expanded {
+	border-color: rgba(240, 178, 100, 0.4);
+	background: rgba(26, 31, 43, 0.85);
+}
+
+.page-head {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	border: none;
+	background: none;
+	padding: 0;
+	cursor: pointer;
+	color: inherit;
+}
+.page-time {
+	font-size: 12.5px;
+	color: var(--paper-dim);
+}
+.chevron {
+	font-size: 22px;
+	color: var(--paper-dim);
+	transition: color 0.2s ease;
+}
+.page-card.expanded .chevron {
+	color: var(--lamp);
+}
+
+.page-situation {
+	font-size: 15.5px;
+	line-height: 1.45;
+	color: var(--paper);
+	margin: 8px 0 0;
+}
+
+/* ===== ink-теги эмоций ===== */
+.ink-tags {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+	margin-top: 10px;
+}
+.ink-tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 12px;
+	color: var(--paper-faint);
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	padding: 3px 9px 3px 7px;
+	white-space: nowrap;
+}
+.ink-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+.ink-intensity {
+	font-style: normal;
+	color: var(--paper-dim);
+	font-size: 11px;
+}
+
+/* ===== Развёрнутая часть ===== */
+.page-detail {
+	margin-top: 14px;
+	padding-top: 14px;
+	border-top: 1px solid var(--line);
+	animation: detail-in 0.25s ease-out both;
+}
+
+@keyframes detail-in {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.detail-section {
+	margin-bottom: 16px;
+}
+.detail-section:last-of-type {
+	margin-bottom: 16px;
+}
+.detail-label {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--paper-dim);
+	margin: 0 0 7px;
+}
+.detail-text {
+	font-size: 15px;
+	line-height: 1.5;
+	color: var(--paper);
+	margin: 0;
+}
+
+.thought {
+	padding: 12px 14px;
+	background: rgba(18, 21, 29, 0.5);
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	margin-bottom: 8px;
+}
+.thought:last-child {
 	margin-bottom: 0;
 }
-
 .thought-text {
-	margin-bottom: var(--space-2);
-	font-size: var(--text-base);
-	color: var(--text-primary);
-	line-height: var(--leading-normal);
+	font-size: 14.5px;
+	line-height: 1.45;
+	color: var(--paper);
+	margin: 0;
+}
+.thought-text b {
+	color: var(--lamp);
+	font-weight: 600;
+}
+.thought .ink-tags {
+	margin-top: 9px;
 }
 
-.thought-emotions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-1);
-}
-
-.emotion-chip-detailed {
-	font-size: var(--text-xs) !important;
-	height: 22px !important;
-	padding: 0 var(--space-2) !important;
-}
-
-.entry-actions-expanded {
-	margin-top: var(--space-4);
-	padding-top: var(--space-4);
-	border-top: 1px solid var(--border-color);
-}
-
-.ai-chat-btn {
+/* ===== Кнопка чата ===== */
+.chat-btn {
 	width: 100%;
-	padding: var(--space-3);
-	border: 2px dashed var(--primary);
-	background: transparent;
-	color: var(--primary);
-	border-radius: var(--radius-base);
-	cursor: pointer;
-	font-weight: var(--font-medium);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: var(--space-2);
-	transition: all var(--transition-fast) var(--ease-in-out);
+	gap: 8px;
+	appearance: none;
+	border: 1px solid rgba(240, 178, 100, 0.5);
+	background: transparent;
+	color: var(--lamp);
+	font-family: inherit;
+	font-size: 14.5px;
+	font-weight: 500;
+	padding: 12px;
+	border-radius: 13px;
+	cursor: pointer;
+	transition: background 0.2s ease, color 0.2s ease;
+}
+.chat-btn .q-icon {
+	font-size: 19px;
+}
+.chat-btn:hover {
+	background: rgba(240, 178, 100, 0.1);
+}
+.chat-btn.filled {
+	border-color: transparent;
+	background: var(--lamp);
+	color: #181203;
+	box-shadow: 0 8px 24px -10px rgba(240, 178, 100, 0.6);
+}
+.chat-btn.filled:hover {
+	background: var(--lamp-deep);
 }
 
-.ai-chat-btn:hover {
-	background: var(--primary);
-	color: var(--text-inverse);
-	transform: translateY(-1px);
-	box-shadow: var(--shadow-sm);
-}
-
-.ai-chat-btn:active {
-	transform: translateY(0);
-	box-shadow: none;
-}
-
-.ai-chat-btn--filled {
-	border-style: solid;
-	border-width: 0;
-	background: var(--primary);
-	color: var(--text-inverse);
-}
-
-.empty-state {
+/* ===== Пусто ===== */
+.diary-empty {
+	margin-top: max(8dvh, 56px);
 	text-align: center;
-	padding: var(--space-8);
-	background: var(--bg-primary);
-	border-radius: var(--radius-lg);
-	box-shadow: var(--shadow-sm);
-	border: 1px solid var(--border-color);
+}
+.empty-line {
+	font-family: "Spectral", Georgia, serif;
+	font-style: italic;
+	font-size: 21px;
+	color: var(--paper-dim);
+	margin: 0 0 8px;
+}
+.empty-sub {
+	font-size: 14px;
+	line-height: 1.5;
+	color: var(--paper-dim);
+	margin: 0 auto;
+	max-width: 30ch;
 }
 
-.empty-icon {
-	font-size: 64px;
-	margin-bottom: var(--space-4);
-	opacity: 0.8;
-}
-
-.empty-title {
-	font-size: var(--text-2xl);
-	font-weight: var(--font-semibold);
-	color: var(--text-primary);
-	margin-bottom: var(--space-2);
-}
-
-.empty-text {
-	color: var(--text-secondary);
-	line-height: var(--leading-normal);
-	margin-bottom: var(--space-6);
-	max-width: 300px;
-	margin-inline: auto;
-}
-
-/* Темная тема - дополнительные стили */
-:root.dark .thought-block {
-	background: var(--bg-tertiary);
-	border-color: var(--bg-tertiary);
-}
-
-:root.dark .entry-expanded {
-	background: var(--bg-tertiary);
-}
-
-:root.dark .emotion-chip-compact,
-:root.dark .emotion-chip-detailed {
-	/* Более яркие цвета эмоций в темной теме */
-	filter: brightness(1.1);
-}
-
-/* Responsive */
-@media (max-width: 500px) {
-	.diary-container {
-		padding: var(--space-3);
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
 	}
-
-	.page-title {
-		font-size: var(--text-2xl);
-	}
-
-	.filter-tabs {
-		gap: var(--space-1);
-		padding: var(--space-1);
-	}
-
-	.filter-tab {
-		padding: var(--space-2);
-		font-size: var(--text-xs);
+	to {
+		opacity: 1;
+		transform: translateY(0);
 	}
 }
 
-.sort-row {
-	margin-top: var(--space-2);
-	display: flex;
-	gap: var(--space-2);
+@media (prefers-reduced-motion: reduce) {
+	.diary-head,
+	.search-field,
+	.filter-row,
+	.sort-row,
+	.entries,
+	.page-detail {
+		animation: none;
+	}
 }
-</style> 
+</style>

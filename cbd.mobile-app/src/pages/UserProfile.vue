@@ -1,159 +1,215 @@
 <template>
-	<div class="profile-page">
-		<div class="profile-container">
-			<!-- Header -->
-			<div class="profile-header">
-				<div class="header-content">
-					<h1 class="page-title">
-						{{ t("profile.title", "Расскажите о себе") }}
+	<div class="onboarding-page">
+		<main class="cover">
+			<!-- Прогресс: три строки тетради -->
+			<header class="progress-head">
+				<p class="progress-label">{{ stepLabel }}</p>
+				<button type="button" class="text-btn dim skip-btn" @click="finish(false)">
+					{{ t("profile.skip", "Пропустить") }}
+				</button>
+				<div class="progress-lines" aria-hidden="true">
+					<span
+						v-for="n in 3"
+						:key="n"
+						class="progress-line"
+						:class="{ 'is-active': n <= step }"
+					></span>
+				</div>
+			</header>
+
+			<!-- Свап шагов без <Transition>: JS-хуки переходов зависают в
+			     фоновых вкладках (rAF заморожен), CSS-анимация на mount надёжнее -->
+			<!-- ===== Шаг 1: обращение ===== -->
+			<section v-if="step === 1" key="address" class="step">
+					<h1 class="step-title">
+						{{ t("profile.addressTitle", "Как к вам обращаться") }}
 					</h1>
-					<p class="page-subtitle">
+					<p class="step-sub">
 						{{
 							t(
-								"profile.subtitle",
-								"Эта информация поможет нам персонализировать ваш опыт"
+								"profile.addressSub",
+								"дневник — личное место, пусть и звучит по-вашему"
 							)
 						}}
 					</p>
-				</div>
-			</div>
 
-			<!-- Форма профиля -->
-			<div class="profile-form" v-if="!isLoading">
-				<!-- Возраст -->
-				<div class="form-section">
-					<label class="section-label">{{ t("profile.age", "Возраст") }}</label>
-					<CbdInput
-						v-model.number="profile.age"
-						type="number"
-						:placeholder="t('profile.agePlaceholder', 'Укажите ваш возраст')"
-						:error-message="errors.age"
-					/>
-				</div>
+					<div class="step-body">
+						<label class="line-field">
+							<span class="line-label">{{ t("profile.nameLabel", "Имя") }}</span>
+							<input
+								v-model="form.name"
+								type="text"
+								autocomplete="nickname"
+								:placeholder="t('profile.namePlaceholder', 'как вас называть')"
+							/>
+							<span class="line-rule" aria-hidden="true"></span>
+						</label>
 
-				<!-- Пол -->
-				<div class="form-section">
-					<label class="section-label">{{ t("profile.gender", "Пол") }}</label>
-					<div class="gender-options">
-						<q-btn
-							v-for="option in genderOptions"
-							:key="option.value"
-							:class="[
-								'gender-btn',
-								{ 'gender-btn--active': profile.gender === option.value },
-							]"
-							@click="profile.gender = option.value"
-							flat
+						<div class="chip-group">
+							<span class="line-label">{{
+								t("profile.addressingLabel", "Обращаться к вам")
+							}}</span>
+							<div class="chips">
+								<button
+									v-for="opt in addressingOptions"
+									:key="opt.value"
+									type="button"
+									class="chip"
+									:class="{ 'is-active': form.addressing === opt.value }"
+									@click="form.addressing = opt.value"
+								>
+									{{ opt.label }}
+								</button>
+							</div>
+						</div>
+
+						<label
+							class="line-field age-field"
+							:class="{ 'is-invalid': ageError }"
 						>
-							{{ option.icon }} {{ option.label }}
-						</q-btn>
+							<span class="line-label">{{ t("profile.age", "Возраст") }}</span>
+							<input
+								v-model.number="form.age"
+								type="number"
+								inputmode="numeric"
+								min="13"
+								max="120"
+								:placeholder="t('profile.agePlaceholder', 'необязательно')"
+								@blur="validateAge"
+							/>
+							<span class="line-rule" aria-hidden="true"></span>
+							<span v-if="ageError" class="line-error">{{ ageError }}</span>
+						</label>
 					</div>
-				</div>
+				</section>
 
-				<!-- Цели использования -->
-				<div class="form-section">
-					<label class="section-label">{{
-						t("profile.goals", "Цели использования приложения")
-					}}</label>
-					<p class="section-hint">
-						{{ t("profile.goalsHint", "Выберите все подходящие варианты") }}
+			<!-- ===== Шаг 2: реакции (непрямой вопрос о проблемах) ===== -->
+			<section v-else-if="step === 2" key="reactions" class="step">
+					<h1 class="step-title">
+						{{ t("profile.reactionsTitle", "Что хочется изменить") }}
+					</h1>
+					<p class="step-sub">
+						{{
+							t(
+								"profile.reactionsSub",
+								"в каких реакциях вам хотелось бы быть спокойнее или увереннее — можно несколько"
+							)
+						}}
 					</p>
-					<div class="goals-grid">
-						<q-btn
-							v-for="goal in goalOptions"
-							:key="goal.value"
-							:class="[
-								'goal-btn',
-								{ 'goal-btn--active': profile.goals.includes(goal.value) },
-							]"
-							@click="toggleGoal(goal.value)"
-							flat
-						>
-							{{ goal.icon }}
-							<span>{{ goal.label }}</span>
-						</q-btn>
-					</div>
-				</div>
 
-				<!-- Уровень опыта -->
-				<div class="form-section">
-					<label class="section-label">{{
-						t("profile.experience", "Опыт работы с эмоциями")
-					}}</label>
-					<div class="experience-options">
-						<q-btn
-							v-for="option in experienceOptions"
-							:key="option.value"
-							:class="[
-								'experience-btn',
-								{
-									'experience-btn--active':
-										profile.experience_level === option.value,
-								},
-							]"
-							@click="profile.experience_level = option.value"
-							flat
-						>
-							<div class="experience-title">{{ option.label }}</div>
-							<div class="experience-desc">{{ option.description }}</div>
-						</q-btn>
-					</div>
-				</div>
+					<div class="step-body">
+						<div class="chips wrap">
+							<button
+								v-for="goal in goalOptions"
+								:key="goal.value"
+								type="button"
+								class="chip"
+								:class="{ 'is-active': form.goals.includes(goal.value) }"
+								@click="toggleGoal(goal.value)"
+							>
+								{{ goal.label }}
+							</button>
+						</div>
 
-				<!-- Частота медитации -->
-				<div class="form-section">
-					<label class="section-label">{{
-						t("profile.meditation", "Как часто вы медитируете?")
-					}}</label>
-					<div class="frequency-options">
-						<q-btn
-							v-for="option in meditationFrequency"
-							:key="option.value"
-							:class="[
-								'frequency-btn',
-								{
-									'frequency-btn--active':
-										profile.meditation_frequency === option.value,
-								},
-							]"
-							@click="profile.meditation_frequency = option.value"
-							flat
-							dense
-						>
-							{{ option.label }}
-						</q-btn>
+						<div class="chip-group cbt-group">
+							<span class="line-label">{{
+								t("profile.cbtLabel", "Знакомы с КПТ?")
+							}}</span>
+							<div class="chips">
+								<button
+									v-for="opt in cbtOptions"
+									:key="opt.value"
+									type="button"
+									class="chip"
+									:class="{ 'is-active': form.cbtFamiliarity === opt.value }"
+									@click="form.cbtFamiliarity = opt.value"
+								>
+									{{ opt.label }}
+								</button>
+							</div>
+						</div>
 					</div>
-				</div>
-			</div>
+				</section>
 
-			<!-- Действия -->
-			<div class="profile-actions" v-if="!isLoading">
-				<CbdButton variant="ghost" size="lg" @click="skipProfile">{{
-					t("profile.skip", "Пропустить")
-				}}</CbdButton>
-				<CbdButton
-					:loading="isSaving"
-					variant="primary"
-					size="lg"
-					@click="saveProfile"
-					:disabled="!isFormValid"
-					>{{ t("profile.continue", "Продолжить") }}</CbdButton
+			<!-- ===== Шаг 3: напоминание ===== -->
+			<section v-else key="reminder" class="step">
+					<h1 class="step-title">
+						{{ t("profile.reminderTitle", "Вечернее напоминание") }}
+					</h1>
+					<p class="step-sub">
+						{{
+							t(
+								"profile.reminderSub",
+								"дневник работает, когда становится привычкой — пара минут перед сном"
+							)
+						}}
+					</p>
+
+					<div class="step-body">
+						<button
+							type="button"
+							class="reminder-toggle"
+							:class="{ 'is-on': form.reminderEnabled }"
+							role="switch"
+							:aria-checked="form.reminderEnabled"
+							@click="form.reminderEnabled = !form.reminderEnabled"
+						>
+							<span class="toggle-track" aria-hidden="true">
+								<span class="toggle-thumb"></span>
+							</span>
+							<span>{{ t("profile.reminderToggle", "Напоминать о записи") }}</span>
+						</button>
+
+						<label
+							class="line-field time-field"
+							:class="{ 'is-muted': !form.reminderEnabled }"
+						>
+							<span class="line-label">{{
+								t("profile.reminderTime", "Время")
+							}}</span>
+							<input
+								v-model="form.reminderTime"
+								type="time"
+								:disabled="!form.reminderEnabled"
+							/>
+							<span class="line-rule" aria-hidden="true"></span>
+						</label>
+					</div>
+			</section>
+
+			<!-- Навигация по шагам -->
+			<footer class="step-foot">
+				<button type="button" class="lamp-btn" :disabled="isSaving" @click="next">
+					<span v-if="isSaving" class="lamp-spinner" aria-hidden="true"></span>
+					<span>{{
+						step < 3 ? t("profile.next", "Дальше") : t("profile.done", "Готово")
+					}}</span>
+				</button>
+				<button
+					v-if="step > 1"
+					type="button"
+					class="text-btn dim back-btn"
+					@click="step--"
 				>
-			</div>
+					← {{ t("profile.back", "Назад") }}
+				</button>
 
-			<!-- Загрузка -->
-			<div v-if="isLoading" class="loading-state">
-				<div class="loading-spinner">⏳</div>
-				<p>{{ t("profile.loading", "Загружаем ваш профиль...") }}</p>
-			</div>
-		</div>
+				<p class="disclaimer">
+					{{
+						t(
+							"profile.disclaimer",
+							"Приложение не заменяет психотерапевта. В кризисной ситуации звоните 112."
+						)
+					}}
+				</p>
+			</footer>
+		</main>
 	</div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { CbdButton, CbdInput } from "../components/ui";
 import { useLocalization } from "../composables/useLocalization";
 import type { UpdateUserRequest } from "../services/api";
 import { useUserStore } from "../stores/user";
@@ -162,692 +218,649 @@ const router = useRouter();
 const userStore = useUserStore();
 const { t } = useLocalization();
 
-const isLoading = ref(true);
+const step = ref(1);
 const isSaving = ref(false);
-const errors = ref({
-	age: "",
-});
+const ageError = ref("");
 
-const profile = ref({
+const stepLabel = computed(
+	() => `${t("profile.stepWord", "шаг")} ${step.value} ${t("profile.ofWord", "из")} 3`
+);
+
+const form = ref({
+	name: "",
+	// Род обращения: важен для русского языка ассистента, не демография
+	addressing: "" as "" | "male" | "female" | "neutral",
 	age: undefined as number | undefined,
-	gender: undefined as string | undefined,
 	goals: [] as string[],
-	experience_level: undefined as string | undefined,
-	meditation_frequency: undefined as string | undefined,
-	stress_level: undefined as number | undefined,
-	sleep_quality: undefined as number | undefined,
+	cbtFamiliarity: "" as "" | "beginner" | "intermediate" | "advanced",
+	reminderEnabled: true,
+	reminderTime: "21:00",
 });
 
-const genderOptions = [
-	{ value: "male", label: t("profile.gender.male", "Мужской"), icon: "👨" },
-	{ value: "female", label: t("profile.gender.female", "Женский"), icon: "👩" },
-	{ value: "other", label: t("profile.gender.other", "Другой"), icon: "🌈" },
+const addressingOptions = [
 	{
-		value: "prefer_not_to_say",
-		label: t("profile.gender.na", "Не указывать"),
-		icon: "🤐",
+		value: "male" as const,
+		label: t("profile.addressing.male", "в мужском роде"),
+	},
+	{
+		value: "female" as const,
+		label: t("profile.addressing.female", "в женском роде"),
+	},
+	{
+		value: "neutral" as const,
+		label: t("profile.addressing.neutral", "без рода"),
 	},
 ];
 
+// Непрямой вопрос о проблемах: реакции, в которых хочется быть лучше
 const goalOptions = [
 	{
-		value: "emotional_awareness",
-		label: t("profile.goal.emotional_awareness", "Понимание эмоций"),
-		icon: "🧠",
+		value: "anxiety_future",
+		label: t("profile.goal.anxiety_future", "Меньше тревожиться о будущем"),
 	},
 	{
-		value: "stress_management",
-		label: t("profile.goal.stress_management", "Управление стрессом"),
-		icon: "😌",
+		value: "criticism",
+		label: t("profile.goal.criticism", "Спокойнее принимать критику"),
 	},
 	{
-		value: "mood_tracking",
-		label: t("profile.goal.mood_tracking", "Отслеживание настроения"),
-		icon: "📊",
+		value: "rumination",
+		label: t("profile.goal.rumination", "Не накручивать себя"),
 	},
 	{
-		value: "mindfulness",
-		label: t("profile.goal.mindfulness", "Осознанность"),
-		icon: "🧘",
+		value: "anger",
+		label: t("profile.goal.anger", "Реже вспыхивать от злости"),
 	},
 	{
-		value: "anxiety_relief",
-		label: t("profile.goal.anxiety_relief", "Работа с тревогой"),
-		icon: "💚",
+		value: "self_criticism",
+		label: t("profile.goal.self_criticism", "Меньше ругать себя"),
 	},
 	{
-		value: "self_development",
-		label: t("profile.goal.self_development", "Саморазвитие"),
-		icon: "🌱",
+		value: "boundaries",
+		label: t("profile.goal.boundaries", "Легче говорить «нет»"),
 	},
 	{
-		value: "therapy_support",
-		label: t("profile.goal.therapy_support", "Поддержка терапии"),
-		icon: "🩺",
+		value: "avoidance",
+		label: t("profile.goal.avoidance", "Не откладывать из-за тревоги"),
 	},
 	{
-		value: "relationship_improvement",
-		label: t("profile.goal.relationship_improvement", "Улучшение отношений"),
-		icon: "❤️",
+		value: "conflicts",
+		label: t("profile.goal.conflicts", "Спокойнее в конфликтах"),
 	},
 ];
 
-const experienceOptions = [
+// Маппится в experienceLevel — от этого зависит, объясняет ли ассистент термины
+const cbtOptions = [
 	{
-		value: "beginner",
-		label: t("profile.experience.beginner", "Новичок"),
-		description: t(
-			"profile.experience.beginnerDesc",
-			"Только начинаю изучать свои эмоции"
-		),
+		value: "beginner" as const,
+		label: t("profile.cbt.beginner", "Нет, расскажите"),
 	},
 	{
-		value: "intermediate",
-		label: t("profile.experience.intermediate", "Средний уровень"),
-		description: t(
-			"profile.experience.intermediateDesc",
-			"Уже знаком с базовыми понятиями"
-		),
+		value: "intermediate" as const,
+		label: t("profile.cbt.intermediate", "Что-то слышал(а)"),
 	},
 	{
-		value: "advanced",
-		label: t("profile.experience.advanced", "Продвинутый"),
-		description: t(
-			"profile.experience.advancedDesc",
-			"Активно работаю с эмоциями и чувствами"
-		),
+		value: "advanced" as const,
+		label: t("profile.cbt.advanced", "Да, знаком(а) на практике"),
 	},
 ];
-
-const meditationFrequency = [
-	{ value: "never", label: t("profile.meditation.never", "Никогда") },
-	{ value: "rarely", label: t("profile.meditation.rarely", "Редко") },
-	{ value: "sometimes", label: t("profile.meditation.sometimes", "Иногда") },
-	{ value: "weekly", label: t("profile.meditation.weekly", "Еженедельно") },
-	{ value: "daily", label: t("profile.meditation.daily", "Ежедневно") },
-];
-
-const isFormValid = computed(() => {
-	return (
-		profile.value.age &&
-		profile.value.age >= 13 &&
-		profile.value.age <= 120 &&
-		!!profile.value.gender &&
-		profile.value.goals.length > 0
-	);
-});
 
 function toggleGoal(goal: string) {
-	const index = profile.value.goals.indexOf(goal);
-	if (index > -1) profile.value.goals.splice(index, 1);
-	else profile.value.goals.push(goal);
+	const index = form.value.goals.indexOf(goal);
+	if (index > -1) form.value.goals.splice(index, 1);
+	else form.value.goals.push(goal);
 }
 
-function validateAge() {
-	if (!profile.value.age) {
-		errors.value.age = String(t("profile.ageRequired", "Возраст обязателен"));
-	} else if ((profile.value.age as number) < 13) {
-		errors.value.age = String(
-			t("profile.ageMin", "Минимальный возраст 13 лет")
-		);
-	} else if ((profile.value.age as number) > 120) {
-		errors.value.age = String(
-			t("profile.ageMax", "Максимальный возраст 120 лет")
-		);
-	} else {
-		errors.value.age = "";
+function validateAge(): boolean {
+	const age = form.value.age;
+	if (age === undefined || age === null || (age as unknown) === "") {
+		ageError.value = "";
+		return true;
 	}
+	if (age < 13) {
+		ageError.value = String(t("profile.ageMin", "Минимальный возраст 13 лет"));
+		return false;
+	}
+	if (age > 120) {
+		ageError.value = String(t("profile.ageMax", "Проверьте возраст"));
+		return false;
+	}
+	ageError.value = "";
+	return true;
 }
 
-async function saveProfile() {
-	validateAge();
-	if (errors.value.age) return;
+async function next() {
+	if (step.value === 1 && !validateAge()) return;
+	if (step.value < 3) {
+		step.value++;
+		return;
+	}
+	await finish(true);
+}
+
+async function finish(save: boolean) {
+	if (!save) {
+		router.push("/home");
+		return;
+	}
 
 	isSaving.value = true;
 	try {
 		const payload: UpdateUserRequest = {
-			name: undefined,
 			preferredLanguage: (navigator.language || "ru").slice(0, 2),
-			age: profile.value.age,
-			gender: profile.value.gender,
-			goals: profile.value.goals,
-			experienceLevel: profile.value.experience_level,
-			meditationFrequency: profile.value.meditation_frequency,
-			stressLevel: profile.value.stress_level,
-			sleepQuality: profile.value.sleep_quality,
 			timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 		};
+		if (form.value.name.trim()) payload.name = form.value.name.trim();
+		// «без рода» — пол не отправляем вовсе
+		if (form.value.addressing === "male" || form.value.addressing === "female") {
+			payload.gender = form.value.addressing;
+		}
+		if (form.value.age) payload.age = form.value.age;
+		if (form.value.goals.length) payload.goals = form.value.goals;
+		if (form.value.cbtFamiliarity) {
+			payload.experienceLevel = form.value.cbtFamiliarity;
+		}
 
 		await userStore.updateProfile(payload);
-
-		// Локально сохраняем, чтобы UI был консистентным
-		localStorage.setItem(
-			"user-profile-extra",
-			JSON.stringify({
-				age: profile.value.age,
-				gender: profile.value.gender,
-				goals: profile.value.goals,
-				experience_level: profile.value.experience_level,
-				meditation_frequency: profile.value.meditation_frequency,
-				stress_level: profile.value.stress_level,
-				sleep_quality: profile.value.sleep_quality,
-				timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-			})
-		);
+		await setupReminder();
 
 		router.push("/home");
 	} catch (error) {
 		console.error("Ошибка сохранения профиля:", error);
+		// Не держим пользователя в плену онбординга из-за сетевой ошибки
+		router.push("/home");
 	} finally {
 		isSaving.value = false;
 	}
 }
 
-function skipProfile() {
-	router.push("/home");
+// Настройка напоминания: сохраняем выбор и планируем ближайшее срабатывание.
+// В вебвью без Tauri планирование тихо не выйдет — настройка останется сохранённой.
+async function setupReminder() {
+	try {
+		localStorage.setItem(
+			"cbd-reminder",
+			JSON.stringify({
+				enabled: form.value.reminderEnabled,
+				time: form.value.reminderTime,
+			})
+		);
+		if (!form.value.reminderEnabled) return;
+
+		const { NotificationService } = await import(
+			"../services/NotificationService"
+		);
+		const [hours, minutes] = form.value.reminderTime.split(":").map(Number);
+		const when = new Date();
+		when.setHours(hours, minutes, 0, 0);
+		if (when.getTime() <= Date.now()) when.setDate(when.getDate() + 1);
+
+		await NotificationService.getInstance().scheduleReminder({
+			title: String(t("login.appTitle", "Дневник")),
+			body: String(
+				t("profile.reminderSub", "пара минут перед сном — как прошёл день?")
+			),
+			scheduled: when,
+		} as any);
+	} catch (e) {
+		console.warn("Напоминание не запланировано:", e);
+	}
 }
 
 onMounted(() => {
-	// одноразовый редирект: если уже были на профиле после логина — не дёргать снова
+	// Префилл имени из аккаунта
+	const current: any =
+		(userStore as any).user ?? (userStore as any).currentUser;
+	if (current?.name) form.value.name = current.name;
+
 	try {
-		const once = localStorage.getItem("profile-once-redirected");
-		if (!once) {
-			localStorage.setItem("profile-once-redirected", "1");
+		const saved = JSON.parse(localStorage.getItem("cbd-reminder") || "null");
+		if (saved) {
+			form.value.reminderEnabled = !!saved.enabled;
+			if (saved.time) form.value.reminderTime = saved.time;
 		}
 	} catch {}
-	// Симуляция загрузки
-	setTimeout(() => {
-		isLoading.value = false;
-	}, 300);
 });
 </script>
 
-<style lang="scss">
-.profile-page {
-	min-height: 100vh;
-	background: var(--bg-secondary);
-	padding-bottom: 80px;
-	transition: background-color var(--transition-base) var(--ease-in-out);
+<style scoped>
+/* «Вечерний дневник» — те же токены, что на логине (обложечные страницы) */
+.onboarding-page {
+	--ink: #12151d;
+	--paper: #ede6d6;
+	--paper-dim: #97907e;
+	--lamp: #f0b264;
+	--lamp-deep: #d99a45;
+	--coral: #e26d5c;
+
+	min-height: 100dvh;
+	display: flex;
+	justify-content: center;
+	background:
+		radial-gradient(
+			90% 48% at 88% -12%,
+			rgba(226, 166, 91, 0.13) 0%,
+			rgba(226, 166, 91, 0) 60%
+		),
+		radial-gradient(120% 100% at 50% 110%, #0d1017 0%, var(--ink) 55%);
+	color: var(--paper);
+	font-family: "Onest", system-ui, sans-serif;
 }
 
-.profile-container {
-	max-width: 500px;
-	margin: 0 auto;
-	padding: var(--space-4);
-}
-
-.profile-header {
-	margin-bottom: var(--space-6);
-	text-align: center;
-}
-
-.header-content {
-	max-width: 600px;
-	margin: 0 auto;
-}
-
-.page-title {
-	font-size: var(--text-3xl);
-	font-weight: var(--font-bold);
-	color: var(--text-primary);
-	margin-bottom: var(--space-2);
-}
-
-.page-subtitle {
-	font-size: var(--text-base);
-	color: var(--text-secondary);
-	line-height: var(--leading-relaxed);
-}
-
-.profile-card {
-	background: var(--bg-primary);
-	border-radius: var(--radius-lg);
-	padding: var(--space-6);
-	box-shadow: var(--shadow-sm);
-	border: 1px solid var(--border-color);
-}
-
-/* Аватар */
-.avatar-section {
-	text-align: center;
-	margin-bottom: var(--space-8);
-}
-
-.avatar-wrapper {
-	position: relative;
-	width: 120px;
-	height: 120px;
-	margin: 0 auto var(--space-4);
-}
-
-.avatar {
+.cover {
 	width: 100%;
-	height: 100%;
-	background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-	border-radius: var(--radius-full);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: var(--text-inverse);
-	font-size: var(--text-5xl);
-	font-weight: var(--font-bold);
-	box-shadow: var(--shadow-md);
-}
-
-.avatar-upload {
-	position: absolute;
-	bottom: 0;
-	right: 0;
-	width: 40px;
-	height: 40px;
-	background: var(--primary);
-	border-radius: var(--radius-full);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	cursor: pointer;
-	border: 3px solid var(--bg-primary);
-	transition: all var(--transition-fast) var(--ease-in-out);
-}
-
-.avatar-upload:hover {
-	transform: scale(1.1);
-	background: var(--primary-hover);
-}
-
-.avatar-upload .q-icon {
-	color: var(--text-inverse);
-	font-size: 20px;
-}
-
-.user-email {
-	font-size: var(--text-base);
-	color: var(--text-secondary);
-}
-
-/* Форма */
-.profile-form {
+	max-width: 400px;
 	display: flex;
 	flex-direction: column;
-	gap: var(--space-4);
+	padding: max(6dvh, 32px) 28px 28px;
 }
 
-.form-actions {
+/* ===== Прогресс ===== */
+.progress-head {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: center;
+	row-gap: 10px;
+	margin-bottom: max(4dvh, 28px);
+}
+
+.progress-label {
+	margin: 0;
+	font-size: 12px;
+	font-weight: 500;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--paper-dim);
+}
+
+.skip-btn {
+	justify-self: end;
+	font-size: 14px;
+}
+
+.progress-lines {
+	grid-column: 1 / -1;
 	display: flex;
-	gap: var(--space-3);
-	margin-top: var(--space-4);
+	gap: 8px;
 }
 
-.save-btn,
-.cancel-btn {
+.progress-line {
 	flex: 1;
+	height: 2px;
+	background: rgba(237, 230, 214, 0.14);
+	transition: background 0.3s ease;
 }
 
-/* Статистика */
-.stats-section {
-	margin-top: var(--space-6);
-	padding-top: var(--space-6);
-	border-top: 1px solid var(--border-color);
+.progress-line.is-active {
+	background: var(--lamp);
 }
 
-.section-title {
-	font-size: var(--text-lg);
-	font-weight: var(--font-semibold);
-	color: var(--text-primary);
-	margin-bottom: var(--space-4);
+/* ===== Шаги ===== */
+.step-title {
+	font-family: "Spectral", Georgia, serif;
+	font-weight: 500;
+	font-size: clamp(30px, 8.6vw, 36px);
+	line-height: 1.1;
+	letter-spacing: -0.01em;
+	margin: 0 0 10px;
 }
 
-.stats-grid {
-	display: grid;
-	grid-template-columns: repeat(2, 1fr);
-	gap: var(--space-3);
+.step-sub {
+	font-family: "Spectral", Georgia, serif;
+	font-style: italic;
+	font-size: 17px;
+	line-height: 1.45;
+	color: var(--paper-dim);
+	margin: 0;
 }
 
-.stat-item {
-	background: var(--bg-secondary);
-	border-radius: var(--radius-base);
-	padding: var(--space-4);
-	text-align: center;
-	transition: all var(--transition-fast) var(--ease-in-out);
-}
-
-.stat-item:hover {
-	transform: translateY(-2px);
-	box-shadow: var(--shadow-sm);
-}
-
-.stat-icon {
-	font-size: 28px;
-	margin-bottom: var(--space-2);
-}
-
-.stat-value {
-	font-size: var(--text-2xl);
-	font-weight: var(--font-bold);
-	color: var(--text-primary);
-	margin-bottom: var(--space-1);
-}
-
-.stat-label {
-	font-size: var(--text-sm);
-	color: var(--text-secondary);
-}
-
-/* Действия */
-.actions-section {
-	margin-top: var(--space-6);
-	padding-top: var(--space-6);
-	border-top: 1px solid var(--border-color);
-}
-
-.action-list {
+.step-body {
 	display: flex;
 	flex-direction: column;
-	gap: var(--space-3);
+	gap: 28px;
+	margin-top: max(4dvh, 28px);
 }
 
-.action-btn {
-	width: 100%;
-	padding: var(--space-4);
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	background: var(--bg-secondary);
-	border: 1px solid var(--border-color);
-	border-radius: var(--radius-base);
-	cursor: pointer;
-	transition: all var(--transition-fast) var(--ease-in-out);
-}
-
-.action-btn:hover {
-	background: var(--bg-hover);
-	border-color: var(--primary);
-	transform: translateX(4px);
-}
-
-.action-content {
-	display: flex;
-	align-items: center;
-	gap: var(--space-3);
-}
-
-.action-icon {
-	width: 40px;
-	height: 40px;
-	background: var(--bg-primary);
-	border-radius: var(--radius-base);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.action-icon .q-icon {
-	font-size: 20px;
-	color: var(--primary);
-}
-
-.action-text {
-	text-align: left;
-}
-
-.action-title {
-	font-weight: var(--font-medium);
-	color: var(--text-primary);
-	margin-bottom: var(--space-1);
-}
-
-.action-subtitle {
-	font-size: var(--text-sm);
-	color: var(--text-secondary);
-}
-
-.action-arrow {
-	color: var(--text-tertiary);
-}
-
-.logout-btn {
-	width: 100%;
-	margin-top: var(--space-4);
-}
-
-/* Стили форм */
-.form-section {
-	margin-bottom: var(--space-6);
-}
-
-.section-label {
+/* ===== Строки тетради ===== */
+.line-field {
+	position: relative;
 	display: block;
-	font-size: var(--text-base);
-	font-weight: var(--font-semibold);
-	color: var(--text-primary);
-	margin-bottom: var(--space-2);
 }
 
-.section-hint {
-	font-size: var(--text-sm);
-	color: var(--text-secondary);
-	margin-bottom: var(--space-3);
+.line-label {
+	display: block;
+	font-size: 12px;
+	font-weight: 500;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--paper-dim);
+	margin-bottom: 2px;
+	transition: color 0.25s ease;
 }
 
-/* Кнопки выбора пола */
-.gender-options {
-	display: grid;
-	grid-template-columns: repeat(2, 1fr);
-	gap: var(--space-2);
+.line-field:focus-within .line-label {
+	color: var(--lamp);
 }
 
-.gender-btn {
-	padding: var(--space-3);
-	border: 2px solid var(--border-color);
-	border-radius: var(--radius-lg);
-	background: var(--bg-primary);
-	cursor: pointer;
-	transition: all var(--transition-fast) var(--ease-in-out);
-	font-size: var(--text-base);
-	color: var(--text-primary);
+.line-field input {
+	width: 100%;
+	background: transparent;
+	border: none;
+	outline: none;
+	padding: 8px 0 9px;
+	font-family: inherit;
+	font-size: 17px;
+	color: var(--paper);
+	caret-color: var(--lamp);
+	border-radius: 0;
 }
 
-.gender-btn:hover {
-	border-color: var(--primary);
-	background: var(--bg-hover);
+.line-field input::placeholder {
+	color: rgba(151, 144, 126, 0.55);
 }
 
-.gender-btn--active {
-	border-color: var(--primary);
-	background: var(--primary);
-	color: var(--text-inverse);
+/* Автозаполнение Chrome: не давать ему красить текст чёрным и заливать фон */
+.line-field input:-webkit-autofill,
+.line-field input:-webkit-autofill:hover,
+.line-field input:-webkit-autofill:focus,
+.line-field input:-webkit-autofill:active {
+	-webkit-text-fill-color: var(--paper);
+	caret-color: var(--lamp);
+	-webkit-box-shadow: 0 0 0 1000px transparent inset;
+	transition: background-color 9999s ease-in-out 0s;
 }
 
-/* Сетка целей */
-.goals-grid {
-	display: grid;
-	grid-template-columns: repeat(2, 1fr);
-	gap: var(--space-3);
+.line-rule {
+	display: block;
+	height: 1px;
+	background: rgba(237, 230, 214, 0.18);
+	position: relative;
+	overflow: hidden;
 }
 
-.goal-btn {
-	padding: var(--space-4);
-	border: 2px solid var(--border-color);
-	border-radius: var(--radius-lg);
-	background: var(--bg-primary);
-	cursor: pointer;
-	transition: all var(--transition-fast) var(--ease-in-out);
-	text-align: center;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: var(--space-2);
+.line-rule::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: var(--lamp);
+	transform: scaleX(0);
+	transform-origin: left;
+	transition: transform 0.35s ease;
 }
 
-.goal-btn:hover {
-	border-color: var(--primary);
-	background: var(--bg-hover);
-	transform: translateY(-2px);
-	box-shadow: var(--shadow-sm);
+.line-field:focus-within .line-rule::after {
+	transform: scaleX(1);
 }
 
-.goal-btn--active {
-	border-color: var(--primary);
-	background: var(--primary);
-	color: var(--text-inverse);
+.line-field.is-invalid .line-rule {
+	background: rgba(226, 109, 92, 0.55);
 }
 
-.goal-btn span {
-	font-size: var(--text-sm);
-	font-weight: var(--font-medium);
+.line-field.is-invalid .line-rule::after {
+	background: var(--coral);
 }
 
-/* Опыт */
-.experience-options {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-2);
+.line-error {
+	display: block;
+	font-size: 12.5px;
+	color: var(--coral);
+	margin-top: 7px;
 }
 
-.experience-btn {
-	padding: var(--space-4);
-	border: 2px solid var(--border-color);
-	border-radius: var(--radius-lg);
-	background: var(--bg-primary);
-	cursor: pointer;
-	transition: all var(--transition-fast) var(--ease-in-out);
-	text-align: left;
+.age-field {
+	max-width: 160px;
 }
 
-.experience-btn:hover {
-	border-color: var(--primary);
-	background: var(--bg-hover);
+.age-field input::-webkit-outer-spin-button,
+.age-field input::-webkit-inner-spin-button {
+	-webkit-appearance: none;
 }
 
-.experience-btn--active {
-	border-color: var(--primary);
-	background: var(--primary);
-	color: var(--text-inverse);
+.time-field {
+	max-width: 160px;
+	transition: opacity 0.25s ease;
 }
 
-.experience-btn--active .experience-desc {
-	color: rgba(255, 255, 255, 0.9);
+.time-field.is-muted {
+	opacity: 0.4;
 }
 
-.experience-title {
-	font-size: var(--text-base);
-	font-weight: var(--font-semibold);
-	margin-bottom: var(--space-1);
+.time-field input::-webkit-calendar-picker-indicator {
+	filter: invert(0.85) sepia(0.3);
 }
 
-.experience-desc {
-	font-size: var(--text-sm);
-	color: var(--text-secondary);
+/* ===== Чипы ===== */
+.chip-group .line-label {
+	margin-bottom: 12px;
 }
 
-/* Частота медитации */
-.frequency-options {
+.chips {
 	display: flex;
 	flex-wrap: wrap;
-	gap: var(--space-2);
+	gap: 10px;
 }
 
-.frequency-btn {
-	padding: var(--space-2) var(--space-4);
-	border: 2px solid var(--border-color);
-	border-radius: var(--radius-full);
-	background: var(--bg-primary);
+.chip {
+	background: transparent;
+	border: 1px solid rgba(237, 230, 214, 0.22);
+	border-radius: 999px;
+	padding: 10px 16px;
+	font-family: inherit;
+	font-size: 14.5px;
+	color: var(--paper);
 	cursor: pointer;
-	transition: all var(--transition-fast) var(--ease-in-out);
-	font-size: var(--text-sm);
-	font-weight: var(--font-medium);
-	color: var(--text-primary);
+	transition:
+		border-color 0.2s ease,
+		background 0.2s ease,
+		color 0.2s ease;
 }
 
-.frequency-btn:hover {
-	border-color: var(--primary);
-	background: var(--bg-hover);
+.chip:hover {
+	border-color: rgba(240, 178, 100, 0.55);
 }
 
-.frequency-btn--active {
-	border-color: var(--primary);
-	background: var(--primary);
-	color: var(--text-inverse);
+.chip.is-active {
+	background: rgba(240, 178, 100, 0.14);
+	border-color: var(--lamp);
+	color: var(--lamp);
 }
 
-/* Действия */
-.profile-actions {
+.chip:focus-visible {
+	outline: 2px solid var(--lamp);
+	outline-offset: 2px;
+}
+
+.cbt-group {
+	margin-top: 4px;
+}
+
+/* ===== Переключатель напоминания ===== */
+.reminder-toggle {
 	display: flex;
-	gap: var(--space-3);
-	margin-top: var(--space-8);
+	align-items: center;
+	gap: 14px;
+	background: none;
+	border: none;
+	padding: 0;
+	font-family: inherit;
+	font-size: 16px;
+	color: var(--paper);
+	cursor: pointer;
 }
 
-.profile-actions .cbd-button {
-	flex: 1;
+.toggle-track {
+	width: 46px;
+	height: 26px;
+	border-radius: 999px;
+	background: rgba(237, 230, 214, 0.18);
+	position: relative;
+	transition: background 0.25s ease;
+	flex-shrink: 0;
 }
 
-/* Состояние загрузки */
-.loading-state {
+.toggle-thumb {
+	position: absolute;
+	top: 3px;
+	left: 3px;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background: var(--paper-dim);
+	transition:
+		transform 0.25s ease,
+		background 0.25s ease;
+}
+
+.reminder-toggle.is-on .toggle-track {
+	background: rgba(240, 178, 100, 0.35);
+}
+
+.reminder-toggle.is-on .toggle-thumb {
+	transform: translateX(20px);
+	background: var(--lamp);
+}
+
+.reminder-toggle:focus-visible .toggle-track {
+	outline: 2px solid var(--lamp);
+	outline-offset: 2px;
+}
+
+/* ===== Низ ===== */
+.step-foot {
+	margin-top: max(6dvh, 40px);
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.lamp-btn {
+	width: 100%;
+	height: 56px;
+	border: none;
+	border-radius: 14px;
+	background: var(--lamp);
+	color: #181203;
+	font-family: inherit;
+	font-size: 16.5px;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	box-shadow: 0 14px 36px rgba(226, 166, 91, 0.22);
+	transition:
+		background 0.2s ease,
+		transform 0.15s ease,
+		box-shadow 0.2s ease,
+		opacity 0.2s ease;
+}
+
+.lamp-btn:hover:not(:disabled) {
+	background: var(--lamp-deep);
+}
+
+.lamp-btn:active:not(:disabled) {
+	transform: translateY(1px);
+	box-shadow: 0 8px 22px rgba(226, 166, 91, 0.18);
+}
+
+.lamp-btn:disabled {
+	opacity: 0.4;
+	cursor: default;
+	box-shadow: none;
+}
+
+.lamp-btn:focus-visible {
+	outline: 2px solid var(--paper);
+	outline-offset: 3px;
+}
+
+.lamp-spinner {
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	border: 2px solid rgba(24, 18, 3, 0.3);
+	border-top-color: #181203;
+	animation: spin 0.7s linear infinite;
+}
+
+.back-btn {
+	align-self: center;
+	font-size: 14.5px;
+}
+
+.text-btn {
+	background: none;
+	border: none;
+	padding: 0;
+	font-family: inherit;
+	cursor: pointer;
+	transition: color 0.2s ease;
+}
+
+.text-btn.dim {
+	color: var(--paper-dim);
+}
+
+.text-btn.dim:hover {
+	color: var(--paper);
+}
+
+.text-btn:focus-visible {
+	outline: 2px solid var(--lamp);
+	outline-offset: 3px;
+	border-radius: 3px;
+}
+
+.disclaimer {
+	margin: 6px 0 0;
+	font-size: 12px;
+	line-height: 1.5;
+	color: rgba(151, 144, 126, 0.75);
 	text-align: center;
-	padding: var(--space-8);
-	color: var(--text-secondary);
 }
 
-.loading-spinner {
-	font-size: 48px;
-	margin-bottom: var(--space-3);
-	animation: spin 2s linear infinite;
+/* ===== Появление шага (CSS-анимация на mount — без JS-хуков) ===== */
+.step {
+	animation: step-in 0.25s ease both;
+}
+
+@keyframes step-in {
+	from {
+		opacity: 0;
+		transform: translateX(14px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
 }
 
 @keyframes spin {
-	from {
-		transform: rotate(0deg);
-	}
 	to {
 		transform: rotate(360deg);
 	}
 }
 
-/* Темная тема */
-:root.dark {
-	.gender-btn,
-	.goal-btn,
-	.experience-btn,
-	.frequency-btn {
-		background: var(--bg-tertiary);
-		border-color: var(--bg-tertiary);
-	}
-
-	.gender-btn:hover,
-	.goal-btn:hover,
-	.experience-btn:hover,
-	.frequency-btn:hover {
-		background: var(--bg-hover);
-		border-color: var(--border-color-hover);
-	}
-
-	.gender-btn--active,
-	.goal-btn--active,
-	.experience-btn--active,
-	.frequency-btn--active {
-		background: var(--primary);
-		border-color: var(--primary);
-		color: var(--text-inverse);
+@media (prefers-reduced-motion: reduce) {
+	.step {
+		animation: none;
 	}
 }
 
-/* Адаптация */
-@media (max-width: 500px) {
-	.profile-container {
-		padding: var(--space-3);
+@media (max-height: 700px) {
+	.cover {
+		padding-top: 24px;
 	}
 
-	.profile-card {
-		padding: var(--space-4);
+	.step-body {
+		margin-top: 20px;
+		gap: 22px;
 	}
 
-	.avatar-wrapper {
-		width: 100px;
-		height: 100px;
-	}
-
-	.avatar {
-		font-size: var(--text-4xl);
+	.step-foot {
+		margin-top: 28px;
 	}
 }
-</style> 
+</style>

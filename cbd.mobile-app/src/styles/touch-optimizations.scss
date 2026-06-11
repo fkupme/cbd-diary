@@ -3,18 +3,14 @@
 
 /* Media query for touch devices */
 @media (hover: none) and (pointer: coarse) {
-  /* Remove all hover effects on touch devices */
-  * {
-    &:hover {
-      /* Reset hover styles to normal state */
-      background-color: inherit !important;
-      color: inherit !important;
-      transform: none !important;
-      box-shadow: inherit !important;
-      border-color: inherit !important;
-      opacity: inherit !important;
-    }
-  }
+  /*
+   * НЕ сбрасываем hover глобально через `* { &:hover { ...: inherit !important } }`.
+   * На тач-устройствах тап оставляет «залипший» :hover на элементе и всей цепочке
+   * его предков вплоть до <html>; правило `color: inherit !important` на них
+   * схлопывало текст в чёрный (заголовок, нажатый чип) на тёмной теме.
+   * Тач-фидбек обеспечивается :active-стилями ниже, hover на touch и так не липнет
+   * к интерактивным контролам с собственными состояниями.
+   */
 
   /* Touch-friendly button styles */
   .q-btn,

@@ -6,88 +6,80 @@
 		transition-hide="jump-down"
 		persistent
 	>
-		<q-card class="bottom-sheet-card">
+		<q-card class="bottom-sheet-card diary-theme">
+			<!-- Хват-полоска -->
+			<div class="sheet-grip"></div>
+
 			<!-- Заголовок с прогрессом -->
 			<div class="emotion-wheel-header">
-				<div class="emotion-wheel-controls">
-					<q-btn
-						v-if="currentStep > 1 && !isSearching"
-						@click="goBack"
-						class="emotion-wheel-close"
-						icon="arrow_back"
-						round
-						flat
-					/>
+				<button
+					v-if="currentStep > 1 && !isSearching"
+					@click="goBack"
+					class="sheet-icon-btn"
+					aria-label="Назад"
+				>
+					<q-icon name="arrow_back" />
+				</button>
+				<div v-else class="sheet-icon-spacer"></div>
 
-					<q-btn
-						@click="closeModal"
-						icon="close"
-						class="emotion-wheel-close"
-						round
-						flat
-					/>
-				</div>
-				<div class="emotion-wheel-info">
-					<q-circular-progress
-						:value="(currentStep / 3) * 100"
-						size="60px"
-						show-value
-						:thickness="0.15"
-						color="primary"
-						track-color="rgba(255, 255, 255, 0.3)"
-						class="emotion-progress-circle"
-					>
-						<div class="progress-text">{{ currentStep }}/3</div>
-					</q-circular-progress>
-					<div class="wheel-title">
-						{{ currentStepTitle }}
+				<div class="wheel-headline">
+					<div class="wheel-steps">
+						<span
+							v-for="s in 3"
+							:key="s"
+							class="wheel-step-seg"
+							:class="{ on: s <= currentStep }"
+						></span>
 					</div>
+					<div class="wheel-title">{{ currentStepTitle }}</div>
 				</div>
+
+				<button @click="closeModal" class="sheet-icon-btn" aria-label="Закрыть">
+					<q-icon name="close" />
+				</button>
 			</div>
 
-			<!-- Поиск эмоций -->
-			<div class="search-bar">
-				<q-input
+			<!-- Поиск эмоций: строка тетради -->
+			<div class="search-field" :class="{ 'has-value': searchQuery }">
+				<q-icon name="search" class="search-ic" />
+				<input
 					v-model="searchQuery"
+					type="text"
 					:placeholder="t('wheel.search', 'Поиск эмоций')"
-					standout
-					dense
-					clearable
-					@clear="onClearSearch"
-					:debounce="200"
-					prefix-icon="search"
+				/>
+				<button
+					v-if="searchQuery"
+					class="search-clear"
+					@click="onClearSearch"
+					aria-label="Очистить"
 				>
-					<template #prepend>
-						<q-icon name="search" />
-					</template>
-				</q-input>
+					×
+				</button>
+				<span class="line-rule"></span>
 			</div>
 
 			<!-- Контент -->
 			<div class="wheel-container">
 				<!-- Результаты поиска -->
 				<div v-if="isSearching" class="search-results">
-					<q-virtual-scroll
-						:items="filteredEmotions"
-						separator
-						v-slot="{ item }"
-						class="search-list"
-					>
-						<q-item clickable @click="quickPickEmotion(item)">
-							<q-item-section>
-								<div class="search-item">
-									<q-chip
-										:color="getCategoryChipColor(String(item.category_id))"
-										text-color="white"
-										dense
-									>
-										{{ item.name }}
-									</q-chip>
-									<span class="search-item-emoji">{{ item.emoji || "" }}</span>
-								</div>
-							</q-item-section>
-						</q-item>
-					</q-virtual-scroll>
+					<ul class="search-list">
+						<li
+							v-for="item in filteredEmotions"
+							:key="item.id"
+							class="search-row"
+							@click="quickPickEmotion(item)"
+						>
+							<i
+								class="search-dot"
+								:style="{ background: getCategoryHex(item.category_id) }"
+							></i>
+							<span class="search-name">{{ item.name }}</span>
+							<span v-if="item.emoji" class="search-emoji">{{ item.emoji }}</span>
+						</li>
+						<li v-if="!filteredEmotions.length" class="search-empty">
+							{{ t("wheel.nothing", "Ничего не нашлось") }}
+						</li>
+					</ul>
 				</div>
 
 				<!-- Обычное колесо -->
@@ -194,11 +186,7 @@
 										)
 									"
 								>
-									<q-chip
-										color="purple"
-										text-color="white"
-										class="intensity-chip"
-									>
+									<div class="intensity-chip">
 										<div class="intensity-content">
 											<div class="intensity-dots">
 												<div
@@ -210,7 +198,7 @@
 											</div>
 											<span class="intensity-text">{{ option.text }}</span>
 										</div>
-									</q-chip>
+									</div>
 								</div>
 							</div>
 						</div>
@@ -538,6 +526,12 @@ function getCategoryChipColor(categoryId: string): string {
 	return colors[(id - 1) % colors.length] || "grey";
 }
 
+// Реальный hex категории (для точки-маркера в «вечернем дневнике»)
+function getCategoryHex(categoryId: number | string): string {
+	const cat = props.categories.find((c) => c.id === Number(categoryId));
+	return cat?.color || "var(--lamp)";
+}
+
 function getEmotionChipColor(): string {
 	if (categoryOptions.value.length === 0) return "grey";
 	const selectedCategory = categoryOptions.value[selectedCategoryIndex.value];
@@ -638,111 +632,214 @@ function quickPickEmotionId(emotionIdStr: string) {
 </script>
 
 <style lang="scss" scoped>
-.emotion-wheel-info {
-	display: flex;
-	align-items: center;
-	gap: var(--space-3);
-}
-
-.bottom-sheet-card {
-	border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-	background: var(--bg-elevated);
-	border: 1px solid var(--border-color);
-	box-shadow: var(--shadow-xl);
-	max-height: 90vh;
+/* «Вечерний дневник»: тёмный bottom-sheet с лампой-акцентом. */
+.bottom-sheet-card.diary-theme {
+	min-height: 0;
+	border-radius: 24px 24px 0 0;
+	background:
+		radial-gradient(120% 80% at 50% -10%, rgba(240, 178, 100, 0.08) 0%, rgba(240, 178, 100, 0) 55%),
+		#14181f;
+	border-top: 1px solid var(--line);
+	box-shadow: 0 -24px 60px -20px rgba(0, 0, 0, 0.7);
+	max-height: 92vh;
 	display: flex;
 	flex-direction: column;
+	color: var(--paper);
+	font-family: "Onest", system-ui, sans-serif;
 }
 
-.emotion-wheel-content {
-	display: flex;
-	flex-direction: column;
-	height: 100%;
+.sheet-grip {
+	width: 38px;
+	height: 4px;
+	border-radius: 999px;
+	background: rgba(237, 230, 214, 0.22);
+	margin: 10px auto 2px;
 }
 
 .emotion-wheel-header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: var(--space-5);
-	border-bottom: 1px solid var(--border-color);
-	background: var(--bg-secondary);
+	gap: 12px;
+	padding: 10px 18px 14px;
 }
 
-.emotion-wheel-controls {
+.sheet-icon-btn {
+	flex-shrink: 0;
+	width: 38px;
+	height: 38px;
+	display: grid;
+	place-items: center;
+	border: 1px solid var(--line);
+	background: rgba(237, 230, 214, 0.04);
+	color: var(--paper-dim);
+	border-radius: 50%;
+	cursor: pointer;
+	transition: color 0.2s ease, border-color 0.2s ease;
+}
+.sheet-icon-btn:hover {
+	color: var(--paper);
+	border-color: rgba(240, 178, 100, 0.4);
+}
+.sheet-icon-btn .q-icon {
+	font-size: 20px;
+}
+.sheet-icon-spacer {
+	width: 38px;
+	flex-shrink: 0;
+}
+
+.wheel-headline {
+	flex: 1;
 	display: flex;
+	flex-direction: column;
 	align-items: center;
-	gap: var(--space-3);
+	gap: 8px;
 }
 
-.emotion-wheel-close {
-	transition: all var(--transition-fast) var(--ease-in-out);
-	border-radius: var(--radius-full);
-	aspect-ratio: 1;
-	width: 36px;
-	background: var(--bg-hover);
-	color: var(--text-secondary);
-
-	&:hover {
-		background: var(--bg-active);
-		color: var(--text-primary);
-		transform: scale(1.05);
-	}
-}
-
-.search-bar {
-	padding: 0 var(--space-5) var(--space-3);
-}
-
-.search-results {
-	width: 100%;
-	padding: 0 var(--space-3);
-}
-
-.search-list {
-	max-height: 50vh;
-}
-
-.search-item {
+.wheel-steps {
 	display: flex;
-	align-items: center;
-	gap: var(--space-3);
+	gap: 5px;
+}
+.wheel-step-seg {
+	width: 22px;
+	height: 3px;
+	border-radius: 999px;
+	background: var(--line);
+	transition: background 0.3s ease;
+}
+.wheel-step-seg.on {
+	background: var(--lamp);
 }
 
-.search-item-emoji {
-	font-size: 18px;
-}
-
-.emotion-progress-circle {
-	margin: 0 auto;
-	color: var(--primary) !important;
-
-	:deep(.q-circular-progress__track) {
-		stroke: var(--border-color) !important;
-	}
-
-	:deep(.q-circular-progress__center) {
-		color: var(--text-primary) !important;
-	}
-}
-
-.progress-text {
-	color: var(--text-primary);
-	font-size: var(--text-base);
-	font-weight: var(--font-semibold);
+.wheel-title {
+	font-family: "Spectral", Georgia, serif;
+	font-weight: 500;
+	font-size: 20px;
+	letter-spacing: -0.01em;
+	color: var(--paper);
 	text-align: center;
 }
 
+/* Поиск: строка тетради */
+.search-field {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 22px 6px;
+}
+.search-ic {
+	font-size: 19px;
+	color: var(--paper-dim);
+	flex-shrink: 0;
+}
+.search-field input {
+	flex: 1;
+	min-width: 0;
+	background: transparent;
+	border: none;
+	outline: none;
+	padding: 9px 0;
+	color: var(--paper);
+	font-family: inherit;
+	font-size: 16px;
+	caret-color: var(--lamp);
+}
+.search-field input::placeholder {
+	color: rgba(151, 144, 126, 0.55);
+}
+.search-clear {
+	flex-shrink: 0;
+	width: 26px;
+	height: 26px;
+	border: none;
+	background: rgba(237, 230, 214, 0.08);
+	color: var(--paper-dim);
+	border-radius: 50%;
+	font-size: 18px;
+	line-height: 1;
+	cursor: pointer;
+}
+.line-rule {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 1px;
+	background: var(--line);
+}
+.line-rule::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: var(--lamp);
+	transform: scaleX(0);
+	transform-origin: left;
+	transition: transform 0.35s ease;
+}
+.search-field:focus-within .line-rule::after {
+	transform: scaleX(1);
+}
+
+/* Результаты поиска */
+.search-results {
+	width: 100%;
+	padding: 6px 14px 16px;
+}
+.search-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	max-height: 52vh;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+}
+.search-row {
+	display: flex;
+	align-items: center;
+	gap: 11px;
+	padding: 12px 10px;
+	border-radius: 12px;
+	cursor: pointer;
+	transition: background 0.15s ease;
+}
+.search-row:hover {
+	background: rgba(237, 230, 214, 0.05);
+}
+.search-dot {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+.search-name {
+	flex: 1;
+	font-size: 15.5px;
+	color: var(--paper);
+}
+.search-emoji {
+	font-size: 18px;
+}
+.search-empty {
+	text-align: center;
+	color: var(--paper-dim);
+	padding: 28px 0;
+	font-style: italic;
+	font-family: "Spectral", Georgia, serif;
+}
+
+/* Контейнер колеса */
 .wheel-container {
 	flex: 1;
-	padding: var(--space-10) var(--space-5);
+	padding: 22px 20px 36px;
 	min-height: 300px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 }
-
-.wheel-step {
+.wheel-step,
+.custom-wheel {
 	width: 100%;
 	display: flex;
 	flex-direction: column;
@@ -751,33 +848,18 @@ function quickPickEmotionId(emotionIdStr: string) {
 
 .wheel-transition-enter-active,
 .wheel-transition-leave-active {
-	transition: all var(--transition-slow) var(--ease-in-out);
+	transition: all 0.3s ease;
 }
-
 .wheel-transition-enter-from {
 	opacity: 0;
-	transform: translateX(50px);
+	transform: translateX(40px);
 }
-
 .wheel-transition-leave-to {
 	opacity: 0;
-	transform: translateX(-50px);
+	transform: translateX(-40px);
 }
 
-.custom-wheel {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	width: 100%;
-}
-
-.wheel-title {
-	font-size: var(--text-xl);
-	font-weight: var(--font-semibold);
-	color: var(--text-primary);
-	text-align: center;
-}
-
+/* 3D-колесо */
 .wheel-3d {
 	position: relative;
 	width: 100%;
@@ -793,14 +875,36 @@ function quickPickEmotionId(emotionIdStr: string) {
 	mask-image: linear-gradient(
 		to bottom,
 		transparent 0%,
-		black 20%,
-		black 80%,
+		black 22%,
+		black 78%,
 		transparent 100%
 	);
+	-webkit-mask-image: linear-gradient(
+		to bottom,
+		transparent 0%,
+		black 22%,
+		black 78%,
+		transparent 100%
+	);
+}
+.wheel-3d:active {
+	cursor: grabbing;
+}
 
-	&:active {
-		cursor: grabbing;
-	}
+/* Центральная «рамка выбора» — тёплая полоса */
+.wheel-3d::before {
+	content: "";
+	position: absolute;
+	left: 8px;
+	right: 8px;
+	top: 50%;
+	height: 64px;
+	transform: translateY(-50%);
+	border-radius: 14px;
+	border: 1px solid rgba(240, 178, 100, 0.28);
+	background: rgba(240, 178, 100, 0.05);
+	pointer-events: none;
+	z-index: 0;
 }
 
 .wheel-item {
@@ -823,147 +927,97 @@ function quickPickEmotionId(emotionIdStr: string) {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-weight: var(--font-semibold);
-	font-size: var(--text-base);
-	border-radius: var(--radius-lg) !important;
-	box-shadow: var(--shadow-sm);
-	transition: all var(--transition-base) var(--ease-in-out);
-	background: var(--bg-elevated);
-	border: 1px solid var(--border-color);
+	font-weight: 500;
+	font-size: 16px;
+	border-radius: 14px;
+	background: rgba(26, 31, 43, 0.5);
+	border: 1px solid var(--line);
+	color: var(--paper-dim);
+	transition: color 0.25s ease, border-color 0.25s ease, background 0.25s ease;
 }
 
-// Цвета для категорий эмоций
-.red {
-	background: var(--emotion-anger-light);
-	color: var(--emotion-anger-dark);
-	border-color: var(--emotion-anger);
+/* Выбранный (по центру) — зажигается лампой */
+.wheel-item.selected .category-chip,
+.wheel-item.selected .emotion-chip,
+.wheel-item.selected .intensity-chip {
+	color: var(--paper);
+	border-color: rgba(240, 178, 100, 0.6);
+	background: rgba(240, 178, 100, 0.12);
+	box-shadow: 0 0 24px -10px rgba(240, 178, 100, 0.5);
 }
 
-.teal {
-	background: var(--emotion-surprise-light);
-	color: var(--emotion-surprise-dark);
-	border-color: var(--emotion-surprise);
+/* убираем «радужные» классы старой темы — в дневнике всё чернильное */
+.category-chip.red,
+.category-chip.teal,
+.category-chip.blue,
+.category-chip.green,
+.category-chip.amber,
+.category-chip.purple,
+.emotion-chip.red,
+.emotion-chip.teal,
+.emotion-chip.blue,
+.emotion-chip.green,
+.emotion-chip.amber,
+.emotion-chip.purple {
+	background: rgba(26, 31, 43, 0.5);
+	border-color: var(--line);
+	color: var(--paper-dim);
+}
+.wheel-item.selected .category-chip,
+.wheel-item.selected .emotion-chip {
+	color: var(--paper);
 }
 
-.blue {
-	background: var(--emotion-sadness-light);
-	color: var(--emotion-sadness-dark);
-	border-color: var(--emotion-sadness);
+/* Шаг 3: выбранная эмоция — янтарная плашка */
+.intensity-description {
+	margin-bottom: 18px;
+	text-align: center;
 }
-
-.green {
-	background: var(--secondary-light);
-	color: var(--secondary-dark);
-	border-color: var(--secondary);
+.selected-emotion-display {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 10px 22px;
+	background: radial-gradient(circle at 50% 30%, #f7c887 0%, var(--lamp) 60%, var(--lamp-deep) 100%);
+	border-radius: 999px;
+	color: #181203;
+	box-shadow: 0 10px 30px -12px rgba(240, 178, 100, 0.6);
 }
-
-.amber {
-	background: var(--emotion-joy-light);
-	color: var(--emotion-joy-dark);
-	border-color: var(--emotion-joy);
-}
-
-.purple {
-	background: var(--emotion-fear-light);
-	color: var(--emotion-fear-dark);
-	border-color: var(--emotion-fear);
-}
-
-:root.dark {
-	.red {
-		background: rgba(248, 113, 113, 0.1);
-		color: var(--emotion-anger);
-		border-color: rgba(248, 113, 113, 0.3);
-	}
-
-	.teal {
-		background: rgba(103, 232, 249, 0.1);
-		color: var(--emotion-surprise);
-		border-color: rgba(103, 232, 249, 0.3);
-	}
-
-	.blue {
-		background: rgba(96, 165, 250, 0.1);
-		color: var(--emotion-sadness);
-		border-color: rgba(96, 165, 250, 0.3);
-	}
-
-	.green {
-		background: rgba(134, 239, 172, 0.1);
-		color: var(--secondary);
-		border-color: rgba(134, 239, 172, 0.3);
-	}
-
-	.amber {
-		background: rgba(252, 211, 77, 0.1);
-		color: var(--emotion-joy);
-		border-color: rgba(252, 211, 77, 0.3);
-	}
-
-	.purple {
-		background: rgba(167, 139, 250, 0.1);
-		color: var(--emotion-fear);
-		border-color: rgba(167, 139, 250, 0.3);
-	}
+.display-text {
+	font-family: "Spectral", Georgia, serif;
+	font-size: 20px;
+	font-weight: 500;
 }
 
 .intensity-content {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: var(--space-2);
+	gap: 7px;
 }
-
-.intensity-description {
-	margin-bottom: var(--space-5);
-	text-align: center;
-}
-
-.selected-emotion-display {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: var(--space-4);
-	margin-bottom: var(--space-4);
-	padding: var(--space-5);
-	background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-	border-radius: var(--radius-xl);
-	color: var(--text-inverse);
-	box-shadow: var(--shadow-md);
-}
-
-.display-text {
-	font-size: var(--text-2xl);
-	font-weight: var(--font-semibold);
-}
-
 .intensity-dots {
 	display: flex;
 	gap: 3px;
 }
-
 .intensity-dot {
-	width: 8px;
-	height: 8px;
-	border-radius: var(--radius-full);
-	background: var(--border-color);
-	transition: background-color var(--transition-fast) var(--ease-in-out);
-
-	&.active {
-		background: var(--primary);
-		box-shadow: 0 0 8px var(--primary);
-	}
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: rgba(237, 230, 214, 0.18);
+	transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
-
+.intensity-dot.active {
+	background: var(--lamp);
+	box-shadow: 0 0 8px -1px var(--lamp);
+}
 .intensity-text {
-	font-size: var(--text-sm);
-	font-weight: var(--font-semibold);
-	text-align: center;
+	font-size: 13px;
+	color: inherit;
 }
 
 @media (max-width: 768px) {
 	.wheel-container {
-		padding: var(--space-5) var(--space-3);
+		padding: 18px 14px 30px;
 		min-height: 260px;
 	}
 	.wheel-item {
@@ -973,7 +1027,14 @@ function quickPickEmotionId(emotionIdStr: string) {
 		margin-top: -30px;
 	}
 	.wheel-title {
-		font-size: var(--text-lg);
+		font-size: 18px;
 	}
 }
-</style> 
+
+@media (prefers-reduced-motion: reduce) {
+	.wheel-transition-enter-active,
+	.wheel-transition-leave-active {
+		transition: none;
+	}
+}
+</style>

@@ -5,6 +5,10 @@ export class SecureStorageService {
 	private static instance: SecureStorageService;
 	private store: Store | null = null;
 	private isInitialized = false;
+	// Браузер (dev-превью без Tauri): фолбэк на localStorage,
+	// чтобы сессия переживала перезагрузку страницы
+	private webFallback = false;
+	private static readonly WEB_PREFIX = 'cbd-secure:';
 
 	static getInstance(): SecureStorageService {
 		if (!SecureStorageService.instance) {
@@ -15,7 +19,7 @@ export class SecureStorageService {
 
 	async initialize(): Promise<boolean> {
 		try {
-			if (this.isInitialized && this.store) return true;
+			if (this.isInitialized) return true;
 
 			// Создаем зашифрованное хранилище
 			this.store = await Store.load('cbd_secure_storage.json', {
@@ -27,8 +31,13 @@ export class SecureStorageService {
 			console.log('✅ SecureStorageService инициализирован');
 			return true;
 		} catch (error) {
-			console.error('❌ Ошибка инициализации SecureStorageService:', error);
-			return false;
+			console.warn(
+				'⚠️ Tauri Store недоступен, используем localStorage (web dev):',
+				error
+			);
+			this.webFallback = true;
+			this.isInitialized = true;
+			return true;
 		}
 	}
 
@@ -38,9 +47,8 @@ export class SecureStorageService {
 		value: SecureStorageValue
 	): Promise<boolean> {
 		try {
-			if (!this.store) {
+			if (!this.isInitialized) {
 				await this.initialize();
-				if (!this.store) throw new Error('Хранилище не инициализировано');
 			}
 
 			// Сохраняем данные с временной меткой
@@ -49,6 +57,14 @@ export class SecureStorageService {
 				timestamp: new Date().toISOString(),
 				encrypted: true,
 			};
+
+			if (this.webFallback || !this.store) {
+				localStorage.setItem(
+					SecureStorageService.WEB_PREFIX + key,
+					JSON.stringify(encryptedData)
+				);
+				return true;
+			}
 
 			await this.store.set(key, encryptedData);
 			await this.store.save();
@@ -66,19 +82,25 @@ export class SecureStorageService {
 		key: SecureStorageKey
 	): Promise<T | null> {
 		try {
-			if (!this.store) {
+			if (!this.isInitialized) {
 				await this.initialize();
-				if (!this.store) throw new Error('Хранилище не инициализировано');
 			}
 
-			const data = await this.store.get<any>(key);
+			let data: any;
+			if (this.webFallback || !this.store) {
+				const raw = localStorage.getItem(
+					SecureStorageService.WEB_PREFIX + key
+				);
+				data = raw ? JSON.parse(raw) : null;
+			} else {
+				data = await this.store.get<any>(key);
+			}
 
 			if (!data || !data.encrypted) {
 				console.warn(`⚠️ Данные не найдены или не зашифрованы: ${key}`);
 				return null;
 			}
 
-			console.log(`🔓 Данные получены из защищенного хранилища: ${key}`);
 			return data.value as T;
 		} catch (error) {
 			console.error('❌ Ошибка получения из защищенного хранилища:', error);
@@ -89,7 +111,10 @@ export class SecureStorageService {
 	// Удалить конкретные данные
 	async removeSecure(key: SecureStorageKey): Promise<boolean> {
 		try {
-			if (!this.store) return false;
+			if (this.webFallback || !this.store) {
+				localStorage.removeItem(SecureStorageService.WEB_PREFIX + key);
+				return true;
+			}
 
 			await this.store.delete(key);
 			await this.store.save();

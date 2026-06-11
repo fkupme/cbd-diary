@@ -136,29 +136,37 @@ function handleAddClick() {
 </script>
 
 <style lang="scss" scoped>
+/* «Вечерний дневник»: тёмная панель + лампа-«плюс».
+   Палитра задаётся локально (компонент живёт вне .diary-theme). */
 .cbd-tab-bar {
+	--ink-soft: #161a24;
+	--paper: #ede6d6;
+	--paper-dim: #8a8474;
+	--lamp: #f0b264;
+	--line: rgba(237, 230, 214, 0.1);
+
 	position: fixed;
 	bottom: 0;
 	left: 0;
 	right: 0;
 	z-index: 1000;
-	background: var(--bg-primary);
-	border-top: 1px solid var(--border-color);
-	box-shadow: var(--shadow-lg);
-	transition: background-color var(--transition-base) var(--ease-in-out);
+	background: rgba(18, 21, 29, 0.92);
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
+	border-top: 1px solid var(--line);
+	animation: slide-up 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 
 	&__container {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: var(--space-2) var(--space-4);
-		height: 64px;
+		padding: 8px 18px;
+		height: 62px;
 		position: relative;
 	}
 
 	&__side {
 		display: flex;
-		gap: var(--space-3);
 		flex: 1;
 
 		&--left {
@@ -179,43 +187,30 @@ function handleAddClick() {
 		height: 48px;
 		border: none;
 		background: none;
-		border-radius: var(--radius-lg);
+		border-radius: 14px;
 		cursor: pointer;
-		transition: all var(--transition-fast) var(--ease-in-out);
-
-		&:hover:not(&--active) {
-			background: var(--bg-hover);
-		}
+		transition: transform 0.1s ease;
 
 		&:active {
-			background: var(--bg-active);
-			transform: scale(0.95);
-		}
-
-		&--active {
-			background: rgba(var(--primary), 0.1);
-
-			// Для темной темы
-			:root.dark & {
-				background: rgba(96, 165, 250, 0.15);
-			}
+			transform: scale(0.92);
 		}
 	}
 
 	&__icon {
-		font-size: 24px;
-		color: var(--text-secondary);
-		transition: all var(--transition-fast) var(--ease-in-out);
+		font-size: 23px;
+		color: var(--paper-dim);
+		transition: color 0.2s ease, transform 0.2s ease;
 
 		&--active {
-			color: var(--primary);
+			color: var(--lamp);
+			transform: translateY(-1px);
 		}
 	}
 
 	&__badge {
 		position: absolute;
-		top: 8px;
-		right: 8px;
+		top: 6px;
+		right: 6px;
 		font-size: 10px;
 		min-width: 16px;
 		height: 16px;
@@ -227,103 +222,79 @@ function handleAddClick() {
 		justify-content: center;
 		width: 56px;
 		height: 56px;
-		background: var(--primary);
 		border: none;
-		border-radius: var(--radius-full);
+		border-radius: 50%;
 		cursor: pointer;
-		transition: all var(--transition-base) var(--ease-out);
-		box-shadow: var(--shadow-md);
 		position: relative;
-		margin-top: -12px;
-
-		&::before {
-			content: "";
-			position: absolute;
-			inset: -4px;
-			background: var(--bg-primary);
-			border-radius: var(--radius-full);
-			z-index: -1;
-		}
-
-		&:hover {
-			transform: translateY(-2px);
-			box-shadow: var(--shadow-lg);
-			background: var(--primary-hover);
-		}
+		margin-top: -16px;
+		color: #181203;
+		background: radial-gradient(
+			circle at 50% 38%,
+			#f7c887 0%,
+			var(--lamp) 58%,
+			#d99a45 100%
+		);
+		box-shadow:
+			0 0 0 5px rgba(18, 21, 29, 0.92),
+			0 8px 26px -6px rgba(240, 178, 100, 0.6),
+			0 0 36px -6px rgba(240, 178, 100, 0.45);
+		transition: transform 0.12s ease, box-shadow 0.2s ease;
 
 		&:active {
-			transform: translateY(0);
-			background: var(--primary-active);
+			transform: scale(0.94);
 		}
 
 		&--active {
-			background: var(--secondary);
-
-			&:hover {
-				background: var(--secondary-hover);
-			}
-
-			&:active {
-				background: var(--secondary-active);
-			}
+			transform: rotate(45deg);
 		}
 	}
 
 	&__add-icon {
 		font-size: 28px;
-		color: var(--text-inverse);
+		color: #181203;
+	}
+}
+
+// Индикатор активного таба — янтарная точка
+.cbd-tab-bar__tab--active::after {
+	content: "";
+	position: absolute;
+	bottom: 2px;
+	left: 50%;
+	width: 5px;
+	height: 5px;
+	background: var(--lamp);
+	border-radius: 50%;
+	transform: translateX(-50%);
+	box-shadow: 0 0 8px -1px var(--lamp);
+	animation: tab-dot 0.3s ease-out;
+}
+
+@keyframes tab-dot {
+	from {
+		opacity: 0;
+		transform: translate(-50%, 4px);
+	}
+	to {
+		opacity: 1;
+		transform: translate(-50%, 0);
+	}
+}
+
+@keyframes slide-up {
+	from {
+		transform: translateY(100%);
+	}
+	to {
+		transform: translateY(0);
 	}
 }
 
 // Адаптивность
 @media (min-width: 768px) {
-	.cbd-tab-bar {
-		&__container {
-			max-width: 400px;
-			margin: 0 auto;
-			border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-		}
-	}
-}
-
-// Анимация появления
-.cbd-tab-bar {
-	animation: slide-up var(--transition-slow) var(--ease-out);
-
-	@keyframes slide-up {
-		from {
-			transform: translateY(100%);
-		}
-		to {
-			transform: translateY(0);
-		}
-	}
-}
-
-// Индикатор активного таба
-.cbd-tab-bar__tab--active {
-	&::after {
-		content: "";
-		position: absolute;
-		bottom: -8px;
-		left: 50%;
-		width: 32px;
-		height: 3px;
-		background: var(--primary);
-		border-radius: var(--radius-full);
-		transform: translateX(-50%);
-		animation: tab-indicator var(--transition-base) var(--ease-out);
-	}
-}
-
-@keyframes tab-indicator {
-	from {
-		width: 0;
-		opacity: 0;
-	}
-	to {
-		width: 32px;
-		opacity: 1;
+	.cbd-tab-bar__container {
+		max-width: 440px;
+		margin: 0 auto;
 	}
 }
 
@@ -331,10 +302,15 @@ function handleAddClick() {
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
 	.cbd-tab-bar {
 		padding-bottom: env(safe-area-inset-bottom);
-
-		&__container {
-			margin-bottom: env(safe-area-inset-bottom);
-		}
 	}
 }
-</style> 
+
+@media (prefers-reduced-motion: reduce) {
+	.cbd-tab-bar {
+		animation: none;
+	}
+	.cbd-tab-bar__tab--active::after {
+		animation: none;
+	}
+}
+</style>

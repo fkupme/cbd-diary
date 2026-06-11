@@ -27,6 +27,32 @@ export function nextStage(stage: ChatStage): ChatStage | null {
   return STAGE_ORDER[idx + 1];
 }
 
+// Ключи целей из онбординга -> человеческие формулировки для промпта.
+// Старые ключи (emotional_awareness и т.п.) оставлены для давних профилей.
+const GOAL_LABELS: Record<string, string> = {
+  anxiety_future: 'меньше тревожиться о будущем',
+  criticism: 'спокойнее принимать критику',
+  rumination: 'не накручивать себя',
+  anger: 'реже вспыхивать от злости',
+  self_criticism: 'меньше ругать себя',
+  boundaries: 'легче говорить «нет»',
+  avoidance: 'не откладывать дела из-за тревоги',
+  conflicts: 'спокойнее вести себя в конфликтах',
+  emotional_awareness: 'лучше понимать свои эмоции',
+  stress_management: 'справляться со стрессом',
+  relationships: 'улучшить отношения',
+  self_esteem: 'укрепить самооценку',
+};
+
+const CBT_FAMILIARITY_NOTES: Record<string, string> = {
+  beginner:
+    'Пользователь не знаком с КПТ: объясняй приёмы простыми словами, без терминов.',
+  intermediate:
+    'Пользователь немного знаком с КПТ: термины использовать можно, но коротко поясняй.',
+  advanced:
+    'Пользователь знаком с КПТ на практике: можно использовать терминологию без пояснений.',
+};
+
 // === Общий каркас: роль, тон, протокол, безопасность ===
 export function buildScaffold(user: any): string {
   const lines: string[] = [];
@@ -54,11 +80,32 @@ export function buildScaffold(user: any): string {
   if (user?.name) userLines.push(`- имя: ${user.name}`);
   if (user?.age) userLines.push(`- возраст: ${user.age}`);
   if (user?.gender) userLines.push(`- пол: ${user.gender}`);
+
+  const goals = Array.isArray(user?.goals)
+    ? (user.goals as unknown[])
+        .map((g) => GOAL_LABELS[String(g)])
+        .filter(Boolean)
+    : [];
+  if (goals.length) {
+    userLines.push(`- хочет реагировать лучше: ${goals.join('; ')}`);
+  }
+
   if (userLines.length) {
     lines.push('');
     lines.push('О пользователе:');
     lines.push(...userLines);
   }
+
+  if (goals.length) {
+    lines.push(
+      'Когда тема записи перекликается с тем, в чём пользователь хочет реагировать лучше, — мягко связывай разбор с этой целью.',
+    );
+  }
+  const familiarityNote = CBT_FAMILIARITY_NOTES[String(user?.experienceLevel)];
+  if (familiarityNote) {
+    lines.push(familiarityNote);
+  }
+
   return lines.join('\n');
 }
 
