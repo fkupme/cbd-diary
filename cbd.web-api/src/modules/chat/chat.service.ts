@@ -1,11 +1,21 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import { AiConnectionService } from '../ai-connection/ai-connection.service';
+import {
+  ChatStage,
+  buildFinalizationSystemPrompt,
+  buildScaffold,
+  buildSmerBlock,
+  buildStageInstruction,
+  buildTransitionInstruction,
+  nextStage,
+} from './chat-prompts';
 
 interface ModelMessage {
   role: 'system' | 'user' | 'assistant';
@@ -14,6 +24,7 @@ interface ModelMessage {
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
   private inactivityTimers = new Map<string, NodeJS.Timeout>();
   private readonly INACTIVITY_MS = 5 * 60 * 1000; // 5 минут
 
@@ -80,7 +91,7 @@ export class ChatService {
 
           // Сохраняем финализацию (с полученной сводкой, если удалось)
           const fin = await (this.prisma as any).chatFinalization.upsert({
-            where: { chat_id: chatId },
+            where: { chatId },
             update: {
               outcome:
                 typeof summary?.outcome === 'string' ? summary.outcome : null,
@@ -159,114 +170,118 @@ export class ChatService {
     }
   }
 
-  private buildAnalysisPrompt(
+  // Системный промпт хода: общий каркас + СМЭР + инструкция ТЕКУЩЕЙ стадии
+  private buildStagePrompt(
     user: any,
     entry: any,
     emotionLabels: Record<number, string>,
+    stage: ChatStage,
   ): string {
-    const tags = Array.isArray(entry?.tags) ? entry.tags : [];
-    const lines: string[] = [];
+    return [
+      buildScaffold(user),
+      buildSmerBlock(entry, emotionLabels),
+      buildStageInstruction(stage),
+    ].join('\n\n');
+  }
 
-    // Роль и стиль
-    lines.push(
-      'Ты — эмпатичный ассистент, помогающий в рамках когнитивно‑поведенческого подхода (КПТ).',
-    );
-    lines.push(
-      'Работай бережно, без оценок и диагнозов, не морализируй, не обесценивай опыт. Пиши по‑русски.',
-    );
-    lines.push(
-      'Главный протокол: один ответ — один короткий вопрос (до ~20–25 слов). Не задавай несколько вопросов сразу. Не переходи к гипотезам и диспуту, пока не собраны ответы.',
-    );
-    lines.push(
-      'Строго запрещено: любые пояснения для разработчика/модели, метатекст и комментарии «в скобках», упоминания правил/инструкций, предисловия типа «после ответа я…». Пиши только полезный текст для пользователя.',
-    );
-    lines.push(
-      'После ответа пользователя делай короткую проверку понимания: начни фразой «Верно ли я понимаю: …?» и переформулируй ключевую мысль своими словами (1–2 строки), затем задай ОДИН следующий вопрос.',
-    );
-    lines.push('');
+  /**
+   * Transition-чекер: после хода ИИ дешёвым структурным вызовом решаем,
+   * завершена ли стадия, и двигаем Chat.stage. Вызывается fire-and-forget,
+   * чтобы не задерживать ai_done.
+   */
+  private async maybeAdvanceStage(
+    chatId: string,
+    currentStage: ChatStage,
+    freshAiText: string,
+  ): Promise<void> {
+    try {
+      const recent = await this.prisma.chatMessage.findMany({
+        where: { chatId },
+        orderBy: { createdAt: 'asc' },
+        take: -8,
+      });
+      const dialog = recent
+        .filter((m) => m.role === 'USER' || m.role === 'AI')
+        .map(
+          (m) =>
+            `${m.role === 'USER' ? 'Пользователь' : 'Ассистент'}: ${m.content}`,
+        );
+      if (freshAiText.trim()) dialog.push(`Ассистент: ${freshAiText.trim()}`);
+      if (!dialog.length) return;
 
-    // Контекст пользователя
-    lines.push('Контекст пользователя:');
-    lines.push(`- id: ${user?.id}`);
-    if (user?.name) lines.push(`- имя: ${user.name}`);
-    if (user?.preferredLanguage)
-      lines.push(`- язык интерфейса: ${user.preferredLanguage}`);
-    if (user?.age) lines.push(`- возраст: ${user.age}`);
-    if (user?.gender) lines.push(`- пол: ${user.gender}`);
-    lines.push('');
+      const text = await this.aiConnection.generateText(
+        [
+          { role: 'system', content: buildTransitionInstruction(currentStage) },
+          { role: 'user', content: dialog.join('\n') },
+        ],
+        { temperature: 0, maxTokens: 512, thinkingBudget: 0, responseJson: true },
+      );
 
-    // Событие (СМЭР)
-    lines.push('Событие (СМЭР):');
-    if (entry?.entryDate)
-      lines.push(`- дата: ${new Date(entry.entryDate).toISOString()}`);
-    lines.push(`- Ситуация: ${entry?.situation ?? ''}`);
+      let verdict: any = {};
+      try {
+        verdict = JSON.parse(text || '{}');
+      } catch {
+        return;
+      }
 
-    if (Array.isArray(entry?.thoughts) && entry.thoughts.length) {
-      const thoughtsBlock = entry.thoughts
-        .map((t: any) => {
-          const emotionsList = Array.isArray(t?.emotions)
-            ? t.emotions
-                .map((e: any) => {
-                  const id = Number(e?.emotionId ?? e?.id);
-                  const label = emotionLabels[id] ?? String(id);
-                  const intensity = e?.intensity ?? '';
-                  return `${label} (${intensity}/10)`;
-                })
-                .join(', ')
-            : '';
-          const thoughtText = t?.thought ?? '';
-          return `• Мысль: ${thoughtText}${emotionsList ? ` | Эмоции: [${emotionsList}]` : ''}`;
-        })
-        .join('\n');
-      lines.push('- Мысли и эмоции:');
-      lines.push(thoughtsBlock);
+      const chat = await this.prisma.chat.findUnique({ where: { id: chatId } });
+      if (!chat || chat.finalized) return;
+      const stageData: any = (chat.stageData as any) ?? {};
+
+      // Кризисные маркеры — приоритетное прерывание в safety
+      if (verdict?.safetyConcern === true && currentStage !== 'safety') {
+        await this.prisma.chat.update({
+          where: { id: chatId },
+          data: {
+            stage: 'safety',
+            stageData: { ...stageData, resumeStage: currentStage },
+          },
+        });
+        this.logger.warn(`chat ${chatId}: safetyConcern -> стадия safety`);
+        return;
+      }
+
+      if (verdict?.stageComplete !== true) return;
+
+      if (currentStage === 'safety') {
+        // Выход из safety — возвращаемся к прерванной стадии
+        const resume: ChatStage =
+          (stageData?.resumeStage as ChatStage) || 'collect_context';
+        await this.prisma.chat.update({
+          where: { id: chatId },
+          data: {
+            stage: resume,
+            stageData: { ...stageData, resumeStage: null },
+          },
+        });
+        this.logger.log(`chat ${chatId}: safety -> ${resume}`);
+        return;
+      }
+
+      const next = nextStage(currentStage);
+      const artifacts =
+        verdict?.artifacts && typeof verdict.artifacts === 'object'
+          ? verdict.artifacts
+          : {};
+      await this.prisma.chat.update({
+        where: { id: chatId },
+        data: {
+          stage: next ?? currentStage,
+          stageData: {
+            ...stageData,
+            [currentStage]: artifacts,
+            ...(next ? {} : { readyToFinalize: true }),
+          },
+        },
+      });
+      this.logger.log(
+        `chat ${chatId}: стадия ${currentStage} завершена -> ${next ?? 'готов к финализации'}`,
+      );
+    } catch (e: any) {
+      this.logger.warn(
+        `maybeAdvanceStage failed for chat ${chatId}: ${e?.message || e}`,
+      );
     }
-
-    if (entry?.reactions) lines.push(`- Реакция/поведение: ${entry.reactions}`);
-    if (tags.length) lines.push(`- Теги: ${tags.join(', ')}`);
-    lines.push('');
-
-    // Правила уточнения контекста (но по одному вопросу за раз)
-    lines.push('Задавай вопросы по одному, в такой приоритетности:');
-    lines.push('- участники и отношения (кто вовлечён, роли/границы)');
-    lines.push('- значимость и ожидания (что было важно, какие ожидания)');
-    lines.push('- альтернативные объяснения и контекст');
-    lines.push('- ценности и потребности');
-    lines.push('Формулируй один краткий открытый вопрос.');
-    lines.push('');
-
-    // Поиск гипотезы — только когда ответы собраны
-    lines.push(
-      'Когда (и только когда) будут получены ответы на серию уточняющих вопросов, предложи 1 гипотезу глубинного убеждения (1 строка).',
-    );
-    lines.push(
-      'Затем сделай короткий КПТ‑диспут (2–3 предложения) и предложи одну более сбалансированную мысль (1 строка).',
-    );
-    lines.push('');
-
-    // Краткая справка
-    lines.push('Справка (кратко):');
-    lines.push(
-      '- Поиск убеждения ("падающая стрела"): «Что это значит для меня? И если это правда, что это говорит обо мне/мире?» — повторять, пока не появится обобщённое «я…/другие…/мир…».',
-    );
-    lines.push(
-      '- Частые искажения: всё‑или‑ничего, катастрофизация, чтение мыслей, чрезмерное обобщение, эмоциональное обоснование, «долженствование», обесценивание позитивного, персонализация.',
-    );
-    lines.push(
-      '- Техники диспута: сократические вопросы, вероятностная оценка, декатастрофизация, когнитивный континуум, переатрибуция, «за/против», поведенческий эксперимент.',
-    );
-    lines.push('');
-
-    // Формат ответа
-    lines.push('Формат ответа:');
-    lines.push(
-      '• Если истории ещё нет: задай ОДИН первый вопрос и остановись.',
-    );
-    lines.push(
-      '• Если пришёл ответ пользователя: сначала «Верно ли я понимаю: …?» (1–2 строки), затем ОДИН следующий вопрос и остановись.',
-    );
-
-    return lines.join('\n');
   }
 
   private async buildEmotionLabels(
@@ -295,59 +310,37 @@ export class ChatService {
     }, {});
   }
 
-  private buildFinalizationSchemaInstruction(): string {
-    return (
-      'Сформируй ИСКЛЮЧИТЕЛЬНО JSON-объект без комментариев и текста вокруг по схеме:\n' +
-      '{\n' +
-      '  "beliefs": [{ "text": string, "confidenceModel": number }],\n' +
-      '  "distortions": [{ "type": string, "confidence": number }],\n' +
-      '  "dispute": { "proposed": string, "user_agreed": boolean },\n' +
-      '  "balanced_thought": string,\n' +
-      '  "next_steps": string[],\n' +
-      '  "outcome": "agreed" | "partially_agreed" | "not_agreed",\n' +
-      '  "finalized": true\n' +
-      '}'
-    );
-  }
-
   private async generateFinalizationSummary(
     userId: string,
     chatId: string,
   ): Promise<any> {
     try {
-      const [chat, entry, user, history] = await Promise.all([
-        this.prisma.chat.findUnique({ where: { id: chatId } }),
-        this.prisma.cbtEntry.findFirst({
-          where: {
-            id: (await this.prisma.chat.findUnique({
-              where: { id: chatId },
-              select: { cbtEntryId: true },
-            }))!.cbtEntryId,
-          },
-        }),
-        this.prisma.user.findUnique({ where: { id: userId } }),
+      const chat = await this.prisma.chat.findUnique({ where: { id: chatId } });
+      if (!chat) throw new NotFoundException('Чат не найден');
+
+      const [entry, history] = await Promise.all([
+        this.prisma.cbtEntry.findFirst({ where: { id: chat.cbtEntryId } }),
         this.prisma.chatMessage.findMany({
           where: { chatId },
           orderBy: { createdAt: 'asc' },
         }),
       ]);
-      if (!chat) throw new NotFoundException('Чат не найден');
 
-      const system = this.buildAnalysisPrompt(
-        user,
-        entry,
-        await this.buildEmotionLabels(entry),
-      );
-      const schema = this.buildFinalizationSchemaInstruction();
+      // Отдельный промпт аналитика: без диалогового протокола, который
+      // конфликтовал бы с задачей «выдай только JSON»
+      const smer = buildSmerBlock(entry, await this.buildEmotionLabels(entry));
+      const stageData = (chat.stageData as any) ?? {};
+      const artifactsBlock = Object.keys(stageData).length
+        ? 'Артефакты, собранные по стадиям сессии (используй их в первую очередь):\n' +
+          JSON.stringify(stageData, null, 2)
+        : '';
 
-      const messages: {
-        role: 'system' | 'user' | 'assistant';
-        content: string;
-      }[] = [
+      const messages: ModelMessage[] = [
         {
           role: 'system',
-          content:
-            system + '\n\n' + 'В конце сгенерируй краткую сводку сеанса.',
+          content: [buildFinalizationSystemPrompt(), smer, artifactsBlock]
+            .filter(Boolean)
+            .join('\n\n'),
         },
       ];
       for (const m of history as any[]) {
@@ -357,20 +350,22 @@ export class ChatService {
           content: String(m.content ?? ''),
         });
       }
-      // Добавляем строгую инструкцию JSON-схемы последним system-сообщением
-      messages.unshift({ role: 'system', content: schema });
 
-      // Финализация — структурный JSON: даём небольшой бюджет размышлений
-      // и запас по токенам, чтобы схема не обрезалась
+      // Структурный JSON-выход + небольшой бюджет размышлений
       const text = await this.aiConnection.generateText(messages, {
-        temperature: 0.4,
+        temperature: 0.3,
         maxTokens: 2048,
         thinkingBudget: 256,
+        responseJson: true,
       });
       try {
         const parsed = JSON.parse(text || '{}');
         if (parsed && typeof parsed === 'object') return parsed;
-      } catch {}
+      } catch {
+        this.logger.warn(
+          `Финализация чата ${chatId}: модель вернула невалидный JSON`,
+        );
+      }
       return {};
     } catch {
       return {};
@@ -410,8 +405,14 @@ export class ChatService {
     // ресетим таймер при старте генерации
     this.scheduleTimeout(chatId);
 
+    const stage: ChatStage = (chat.stage as ChatStage) || 'collect_context';
     const emotionLabels = await this.buildEmotionLabels(entry);
-    const systemPrompt = this.buildAnalysisPrompt(user, entry, emotionLabels);
+    const systemPrompt = this.buildStagePrompt(
+      user,
+      entry,
+      emotionLabels,
+      stage,
+    );
     const messages: ModelMessage[] = [
       { role: 'system', content: systemPrompt },
       ...this.mapHistoryToModelMessages(history),
@@ -426,6 +427,9 @@ export class ChatService {
 
     // по завершении тоже ресетим (есть активность)
     this.scheduleTimeout(chatId);
+
+    // Решение о смене стадии — отдельным дешёвым вызовом, не задерживая ответ
+    void this.maybeAdvanceStage(chatId, stage, full);
 
     return full;
   }

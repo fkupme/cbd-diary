@@ -63,6 +63,9 @@ services:
       JWT_REFRESH_EXPIRE: 7d
       APP_API_PREFIX: api
       APP_API_VERSION: v1
+      # Авто-финализация чата по неактивности (мс / минимум пар сообщений)
+      CHAT_SUMMARY_TIMEOUT: ${CHAT_SUMMARY_TIMEOUT:-300000}
+      CHAT_SUMMARY_CONDITION: ${CHAT_SUMMARY_CONDITION:-3}
     volumes:
       - ./cbd.web-api:/app
       - /app/node_modules

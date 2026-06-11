@@ -46,7 +46,11 @@ jobs:
           script: |
             set -e
             cd ${{ env.DEPLOY_DIR }}
-            git remote set-url origin https://x-access-token:${GH_PAT}@github.com/fkupme/cbd-diary.git
+            # Если VPS ходит в GitHub по SSH (deploy key) — GH_PAT не нужен,
+            # remote не трогаем; PAT используется только если секрет задан
+            if [ -n "${GH_PAT}" ]; then
+              git remote set-url origin https://x-access-token:${GH_PAT}@github.com/fkupme/cbd-diary.git
+            fi
             git pull origin main
 
             # .env для docker compose собирается из GitHub Secrets —

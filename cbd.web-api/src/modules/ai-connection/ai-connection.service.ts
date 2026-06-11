@@ -16,6 +16,8 @@ interface GenerateOpts {
    * может съесть весь бюджет и вернуть пустой текст (проверено на 2.5-pro).
    */
   thinkingBudget?: number;
+  /** Строгий JSON-выход (responseMimeType: application/json) */
+  responseJson?: boolean;
 }
 
 interface GeminiContent {
@@ -30,6 +32,7 @@ interface GeminiRequestBody {
     temperature: number;
     maxOutputTokens: number;
     thinkingConfig?: { thinkingBudget: number };
+    responseMimeType?: string;
   };
 }
 
@@ -95,6 +98,9 @@ export class AiConnectionService {
         },
       },
     };
+    if (opts?.responseJson) {
+      body.generationConfig.responseMimeType = 'application/json';
+    }
     if (systemText) {
       body.systemInstruction = { parts: [{ text: systemText }] };
     }
@@ -105,10 +111,11 @@ export class AiConnectionService {
     url: string,
     body: GeminiRequestBody,
   ): Promise<Response> {
-    // Один повтор на перегрузку/лимиты (429/503) — у Gemini это штатные
-    // транзиентные ответы; больше ретраев не делаем, чтобы не жечь квоту.
+    // Повторы на перегрузку/лимиты (429/503) — у Gemini это штатные
+    // транзиентные ответы (в пики 503 прилетают сериями).
+    const MAX_ATTEMPTS = 3;
     let lastError: unknown;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       try {
         const res = await fetch(url, {
           method: 'POST',
@@ -118,16 +125,20 @@ export class AiConnectionService {
           },
           body: JSON.stringify(body),
         });
-        if ((res.status === 429 || res.status === 503) && attempt === 0) {
-          this.logger.warn(`Gemini: ${res.status}, повтор через 3с...`);
-          await new Promise((r) => setTimeout(r, 3000));
+        if (
+          (res.status === 429 || res.status === 503) &&
+          attempt < MAX_ATTEMPTS - 1
+        ) {
+          const delayMs = 3000 * (attempt + 1);
+          this.logger.warn(`Gemini: ${res.status}, повтор через ${delayMs}мс...`);
+          await new Promise((r) => setTimeout(r, delayMs));
           continue;
         }
         return res;
       } catch (e) {
         lastError = e;
-        if (attempt === 0) {
-          await new Promise((r) => setTimeout(r, 3000));
+        if (attempt < MAX_ATTEMPTS - 1) {
+          await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));
           continue;
         }
       }

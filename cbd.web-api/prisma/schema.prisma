@@ -287,6 +287,11 @@ model Chat {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
+  // Стадия КПТ-сессии: collect_context | find_belief | dispute | consolidate | safety
+  stage      String   @default("collect_context") @db.VarChar(32)
+  // Артефакты стадий (контекст, убеждение, техника диспута, сбалансированная мысль...)
+  stageData  Json     @default("{}") @map("stage_data")
+
   // Финализация сессии
   finalized  Boolean  @default(false)
   endedAt    DateTime?

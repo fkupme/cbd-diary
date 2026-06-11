@@ -10,8 +10,8 @@ export const API_CONFIG = {
 		local: 'http://localhost:3002/api/v1', // Fallback для локальной разработки
 		androidEmulator: 'http://10.0.2.2:3002/api/v1',
 		hostDockerInternal: 'http://host.docker.internal:3002/api/v1',
-		production: 'https://api.cbd-diary.com/api/v1',
-		staging: 'https://staging-api.cbd-diary.com/api/v1',
+		production: 'https://api.cbd-diary.ru/api/v1',
+		staging: 'https://staging-api.cbd-diary.ru/api/v1',
 	},
 
 	// Endpoints для каждого домена
