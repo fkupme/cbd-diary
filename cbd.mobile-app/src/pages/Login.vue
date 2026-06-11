@@ -395,13 +395,6 @@ async function handleForgotPassword() {
 	);
 }
 
-async function handleGoogleLogin() {
-	alert("Google авторизация будет добавлена в следующих обновлениях");
-}
-
-async function handleFacebookLogin() {
-	alert("Facebook авторизация будет добавлена в следующих обновлениях");
-}
 </script>
 
 <style scoped>

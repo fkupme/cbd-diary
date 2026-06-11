@@ -126,50 +126,57 @@ export interface ChangePasswordRequest {
 // Emotions API Types
 // ===============================
 
+// Формы соответствуют реальным ответам бэка (EmotionCategoryResponseDto /
+// EmotionResponseDto): camelCase, name = локализованное имя (или nameKey,
+// если перевода нет — фронт умеет переводить ключи сам через vue-i18n).
 export interface EmotionCategory {
 	id: number;
+	nameKey: string;
 	name: string;
-	name_key: string;
-	description?: string;
 	color: string;
-	emoji?: string;
+	icon?: string;
 	sortOrder: number;
+	isActive: boolean;
 	createdAt: string;
-	updatedAt: string;
+}
+
+export interface EmotionCategoryRef {
+	id: number;
+	nameKey: string;
+	name: string;
+	color: string;
+	icon?: string;
 }
 
 export interface Emotion {
 	id: number;
 	categoryId: number;
+	nameKey: string;
 	name: string;
-	name_key: string;
-	description?: string;
-	intensity?: number;
-	emoji?: string;
-	color?: string;
+	emoji: string;
+	intensityDefault: number;
+	synonyms: string[];
+	oppositeEmotionId?: number | null;
 	sortOrder: number;
+	isActive: boolean;
 	createdAt: string;
-	updatedAt: string;
-	category?: EmotionCategory;
+	category?: EmotionCategoryRef;
 }
 
 export interface CreateEmotionCategoryRequest {
-	name: string;
-	name_key: string;
-	description?: string;
+	nameKey: string;
 	color: string;
-	emoji?: string;
+	icon?: string;
 	sortOrder?: number;
 }
 
 export interface CreateEmotionRequest {
 	categoryId: number;
-	name: string;
-	name_key: string;
-	description?: string;
-	intensity?: number;
-	emoji?: string;
-	color?: string;
+	nameKey: string;
+	emoji: string;
+	intensityDefault?: number;
+	synonyms?: string[];
+	oppositeEmotionId?: number;
 	sortOrder?: number;
 }
 
@@ -193,31 +200,28 @@ export interface CBTEntry {
 	updatedAt: string;
 }
 
+// Канонический вид элементов thoughts (см. mapTauriEntryToApi и
+// thoughts.helper.ts на бэке): без выдуманных полей вроде entryId/createdAt,
+// которых в данных никогда не было.
 export interface CBTThought {
-	id: string;
-	entryId: string;
+	id?: string;
 	thought: string;
 	isAutomatic: boolean;
 	intensity: number;
 	emotions: CBTEmotion[];
 	cognitiveDistortions: CognitiveDistortion[];
-	createdAt: string;
-	updatedAt: string;
 }
 
 export interface CBTEmotion {
-	id: string;
-	thoughtId: string;
 	emotionId: number;
 	intensity: number;
+	durationMinutes?: number;
 	emotion?: Emotion;
 }
 
 export interface CognitiveDistortion {
-	id: string;
-	thoughtId: string;
 	type: string;
-	description?: string;
+	note?: string;
 }
 
 export interface CreateCBTEntryRequest {
@@ -244,7 +248,7 @@ export interface CreateCBTEmotionRequest {
 
 export interface CreateCognitiveDistortionRequest {
 	type: string;
-	description?: string;
+	note?: string;
 }
 
 export interface UpdateCBTEntryRequest {
@@ -264,36 +268,55 @@ export interface UpdateMoodAfterRequest {
 // Analytics API Types
 // ===============================
 
+// Зеркало серверного UserStatsResponseDto (GET /analytics/user-stats)
 export interface UserStats {
+	userId: string;
 	totalEntries: number;
-	totalEmotions: number;
-	averageMoodBefore: number;
-	averageMoodAfter?: number;
-	moodImprovement?: number;
-	mostCommonEmotions: EmotionStat[];
-	streakDays: number;
-	lastEntryDate?: string;
+	currentStreakDays: number;
+	longestStreakDays: number;
+	avgMoodScore: number;
+	mostCommonEmotionId?: number;
+	entriesThisWeek: number;
+	entriesThisMonth: number;
+	lastCalculatedAt: string;
+	mostCommonEmotion?: {
+		id: number;
+		name: string;
+		emoji: string;
+		count: number;
+	};
+	moodTrend: { direction: 'up' | 'down' | 'stable'; change: number };
+	weeklyActivity: Array<{
+		date: string;
+		entriesCount: number;
+		avgMoodScore: number;
+	}>;
 }
 
+// Локальная агрегация по эмоциям (stores/analytics.ts)
 export interface EmotionStat {
-	emotion: Emotion;
+	emotionId: number;
+	emotionName: string;
 	count: number;
 	percentage: number;
-	averageIntensity: number;
+	averageIntensity?: number;
 }
 
 export interface MoodTrend {
 	date: string;
 	averageMoodBefore: number;
-	averageMoodAfter?: number;
+	averageMoodAfter?: number | null;
 	entryCount: number;
 }
 
+// Локальные инсайты (генерируются на клиенте в stores/analytics.ts)
 export interface CognitiveInsight {
-	distortionType: string;
-	count: number;
-	percentage: number;
-	improvement?: number;
+	type: string;
+	title: string;
+	description: string;
+	confidence: number;
+	actionable: boolean;
+	category: string;
 }
 
 export interface ProgressReport {

@@ -278,7 +278,7 @@ export class ApiClient {
 			}
 
 			// Выполняем запрос
-			const response = await this.httpService.request<ApiResponse<T>>({
+			const response = await this.httpService.request<T>({
 				method,
 				endpoint,
 				data,
@@ -301,7 +301,7 @@ export class ApiClient {
 						...options.headers,
 						Authorization: `Bearer ${this.authToken}`,
 					};
-					const retryResponse = await this.httpService.request<ApiResponse<T>>({
+					const retryResponse = await this.httpService.request<T>({
 						method,
 						endpoint,
 						data,
@@ -341,7 +341,7 @@ export class ApiClient {
 						Authorization: `Bearer ${this.authToken}`,
 					};
 
-					const retryResponse = await this.httpService.request<ApiResponse<T>>({
+					const retryResponse = await this.httpService.request<T>({
 						method,
 						endpoint,
 						data,
@@ -427,7 +427,7 @@ export class ApiClient {
 	 */
 	public async health(): Promise<boolean> {
 		try {
-			await this.get('/health', undefined, {
+			await this.get(API_CONFIG.ENDPOINTS.SYNC.HEALTH, undefined, {
 				requireAuth: false,
 				timeout: 5000,
 			});

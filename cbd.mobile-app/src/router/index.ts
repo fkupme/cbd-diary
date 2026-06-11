@@ -59,10 +59,6 @@ const routes: RouteRecordRaw[] = [
 		meta: {
 			requiresAuth: true,
 			hideTabBar: false,
-			disabled: true,
-		},
-		beforeEnter: (_to, _from, next) => {
-			next('/home');
 		},
 	},
 	{

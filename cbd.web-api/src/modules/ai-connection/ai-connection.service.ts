@@ -1,35 +1,147 @@
 import { Injectable, Logger } from '@nestjs/common';
-import OpenAI from 'openai';
 
 interface ChatMessagePayload {
   role: 'system' | 'user' | 'assistant';
   content: string;
 }
 
+interface GenerateOpts {
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  /**
+   * Бюджет «размышлений» Gemini 2.5 (в токенах). 0 — отключить (минимальная
+   * задержка и цена, дефолт для чата). ВАЖНО: размышления тратят
+   * maxOutputTokens — с дефолтным лимитом чата (700) включённый thinking
+   * может съесть весь бюджет и вернуть пустой текст (проверено на 2.5-pro).
+   */
+  thinkingBudget?: number;
+}
+
+interface GeminiContent {
+  role: 'user' | 'model';
+  parts: { text: string }[];
+}
+
+interface GeminiRequestBody {
+  systemInstruction?: { parts: { text: string }[] };
+  contents: GeminiContent[];
+  generationConfig: {
+    temperature: number;
+    maxOutputTokens: number;
+    thinkingConfig?: { thinkingBudget: number };
+  };
+}
+
 @Injectable()
 export class AiConnectionService {
   private readonly logger = new Logger(AiConnectionService.name);
-  private client: OpenAI | null = null;
 
-  constructor() {}
+  private get apiKey(): string {
+    return process.env.GEMINI_API_KEY || '';
+  }
 
-  private getClient(): OpenAI {
-    if (this.client) return this.client;
-    const apiKey = process.env.OPEN_ROUTER_API_KEY;
-    const baseURL =
-      process.env.OPEN_ROUTER_URL || 'https://openrouter.ai/api/v1';
-    const referer =
-      process.env.APP_URL || process.env.APP_BASE_URL || 'http://localhost';
-    const title = process.env.APP_NAME || 'CBD Diary API';
-    this.client = new OpenAI({
-      apiKey: apiKey || '',
-      baseURL,
-      defaultHeaders: {
-        'HTTP-Referer': referer,
-        'X-Title': title,
+  private get baseUrl(): string {
+    return (
+      process.env.GEMINI_API_URL ||
+      'https://generativelanguage.googleapis.com/v1beta'
+    );
+  }
+
+  private get defaultModel(): string {
+    // Стабильная 2.5 flash: preview-версии текстовой 2.5 flash сняты после GA
+    return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  }
+
+  private get defaultThinkingBudget(): number {
+    const raw = Number(process.env.GEMINI_THINKING_BUDGET);
+    return Number.isFinite(raw) ? raw : 0;
+  }
+
+  // system-сообщения уходят в systemInstruction, assistant -> model
+  private buildRequestBody(
+    messages: ChatMessagePayload[],
+    opts?: GenerateOpts,
+  ): GeminiRequestBody {
+    const systemText = messages
+      .filter((m) => m.role === 'system')
+      .map((m) => m.content)
+      .join('\n\n');
+
+    const contents: GeminiContent[] = messages
+      .filter((m) => m.role !== 'system')
+      .map((m) => ({
+        role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
+        parts: [{ text: m.content }],
+      }));
+
+    // Gemini требует непустой contents: если истории нет — даём пустую реплику
+    if (contents.length === 0) {
+      contents.push({ role: 'user', parts: [{ text: '' }] });
+    }
+
+    const body: GeminiRequestBody = {
+      contents,
+      generationConfig: {
+        temperature:
+          typeof opts?.temperature === 'number' ? opts.temperature : 0.7,
+        maxOutputTokens:
+          typeof opts?.maxTokens === 'number' ? opts.maxTokens : 512,
+        thinkingConfig: {
+          thinkingBudget:
+            typeof opts?.thinkingBudget === 'number'
+              ? opts.thinkingBudget
+              : this.defaultThinkingBudget,
+        },
       },
-    });
-    return this.client;
+    };
+    if (systemText) {
+      body.systemInstruction = { parts: [{ text: systemText }] };
+    }
+    return body;
+  }
+
+  private async fetchWithRetry(
+    url: string,
+    body: GeminiRequestBody,
+  ): Promise<Response> {
+    // Один повтор на перегрузку/лимиты (429/503) — у Gemini это штатные
+    // транзиентные ответы; больше ретраев не делаем, чтобы не жечь квоту.
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': this.apiKey,
+          },
+          body: JSON.stringify(body),
+        });
+        if ((res.status === 429 || res.status === 503) && attempt === 0) {
+          this.logger.warn(`Gemini: ${res.status}, повтор через 3с...`);
+          await new Promise((r) => setTimeout(r, 3000));
+          continue;
+        }
+        return res;
+      } catch (e) {
+        lastError = e;
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 3000));
+          continue;
+        }
+      }
+    }
+    throw lastError ?? new Error('Gemini: запрос не удался');
+  }
+
+  private extractText(data: any): string {
+    const parts = data?.candidates?.[0]?.content?.parts;
+    if (!Array.isArray(parts)) return '';
+    return parts
+      .filter((p: any) => typeof p?.text === 'string' && !p?.thought)
+      .map((p: any) => p.text)
+      .join('');
   }
 
   async logPrompt(
@@ -42,37 +154,39 @@ export class AiConnectionService {
 
   async generateText(
     messages: ChatMessagePayload[],
-    opts?: { model?: string; temperature?: number; maxTokens?: number },
+    opts?: GenerateOpts,
   ): Promise<string> {
-    const apiKey = process.env.OPEN_ROUTER_API_KEY;
-    if (!apiKey) {
-      this.logger.warn('OPEN_ROUTER_API_KEY is not set');
+    if (!this.apiKey) {
+      this.logger.warn('GEMINI_API_KEY is not set');
       return '';
     }
-    const client = this.getClient();
-    const model =
-      opts?.model || process.env.OPEN_ROUTER_MODEL;
-    const temperature =
-      typeof opts?.temperature === 'number' ? opts!.temperature : 0.7;
-    const max_tokens =
-      typeof opts?.maxTokens === 'number' ? opts!.maxTokens : 512;
+    const model = opts?.model || this.defaultModel;
+    const body = this.buildRequestBody(messages, opts);
     try {
       this.logger.log(
-        `OpenRouter: calling model=${model}, temperature=${temperature}, max_tokens=${max_tokens}`,
+        `Gemini: model=${model}, temp=${body.generationConfig.temperature}, maxTokens=${body.generationConfig.maxOutputTokens}`,
       );
-      const completion = await client.chat.completions.create({
-        model,
-        messages,
-        temperature,
-        max_tokens,
-      } as any);
-      const text = completion?.choices?.[0]?.message?.content ?? '';
-      this.logger.log(
-        `OpenRouter: response received, length=${(text || '').length}`,
+      const res = await this.fetchWithRetry(
+        `${this.baseUrl}/models/${model}:generateContent`,
+        body,
       );
+      if (!res.ok) {
+        const errText = await res.text();
+        this.logger.error(`Gemini ${res.status}: ${errText.slice(0, 300)}`);
+        return '';
+      }
+      const data = await res.json();
+      const text = this.extractText(data);
+      const finish = data?.candidates?.[0]?.finishReason;
+      if (!text && finish === 'MAX_TOKENS') {
+        this.logger.warn(
+          'Gemini: пустой ответ из-за MAX_TOKENS — размышления съели бюджет, увеличьте maxTokens или уменьшите thinkingBudget',
+        );
+      }
+      this.logger.log(`Gemini: ответ получен, длина=${text.length}`);
       return text;
     } catch (e: any) {
-      this.logger.error(`OpenRouter request failed: ${e?.message || e}`);
+      this.logger.error(`Gemini request failed: ${e?.message || e}`);
       return '';
     }
   }
@@ -80,48 +194,59 @@ export class AiConnectionService {
   async generateTextStream(
     messages: ChatMessagePayload[],
     onDelta: (delta: string) => Promise<void> | void,
-    opts?: { model?: string; temperature?: number; maxTokens?: number },
+    opts?: GenerateOpts,
   ): Promise<string> {
-    const apiKey =
-      process.env.OPEN_ROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      this.logger.warn('OPEN_ROUTER_API_KEY is not set');
+    if (!this.apiKey) {
+      this.logger.warn('GEMINI_API_KEY is not set');
       return '';
     }
-    const client = this.getClient();
-    const model =
-      opts?.model ||
-      process.env.OPEN_ROUTER_MODEL
-      
-    const temperature =
-      typeof opts?.temperature === 'number' ? opts!.temperature : 0.7;
-    const max_tokens =
-      typeof opts?.maxTokens === 'number' ? opts!.maxTokens : 512;
+    const model = opts?.model || this.defaultModel;
+    const body = this.buildRequestBody(messages, opts);
 
     let full = '';
     try {
       this.logger.log(
-        `OpenRouter(stream): calling model=${model}, temperature=${temperature}, max_tokens=${max_tokens}`,
+        `Gemini(stream): model=${model}, temp=${body.generationConfig.temperature}, maxTokens=${body.generationConfig.maxOutputTokens}`,
       );
-      const stream = await client.chat.completions.create({
-        model,
-        messages,
-        temperature,
-        max_tokens,
-        stream: true,
-      } as any);
+      const res = await this.fetchWithRetry(
+        `${this.baseUrl}/models/${model}:streamGenerateContent?alt=sse`,
+        body,
+      );
+      if (!res.ok || !res.body) {
+        const errText = await res.text();
+        this.logger.error(`Gemini ${res.status}: ${errText.slice(0, 300)}`);
+        return '';
+      }
 
-      for await (const chunk of stream as any) {
-        const delta = chunk?.choices?.[0]?.delta?.content ?? '';
-        if (typeof delta === 'string' && delta.length > 0) {
-          full += delta;
-          await onDelta(delta);
+      // SSE: события вида "data: {json}\n\n"
+      const decoder = new TextDecoder();
+      let buffer = '';
+      for await (const chunk of res.body as any) {
+        buffer += decoder.decode(chunk, { stream: true });
+        let newlineIdx: number;
+        while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, newlineIdx).trim();
+          buffer = buffer.slice(newlineIdx + 1);
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice('data:'.length).trim();
+          if (!payload || payload === '[DONE]') continue;
+          try {
+            const data = JSON.parse(payload);
+            const delta = this.extractText(data);
+            if (delta) {
+              full += delta;
+              await onDelta(delta);
+            }
+          } catch {
+            // неполный JSON в середине чанка не ожидается при построчном SSE,
+            // но на всякий случай не роняем стрим
+          }
         }
       }
-      this.logger.log(`OpenRouter(stream): done, total length=${full.length}`);
+      this.logger.log(`Gemini(stream): done, total length=${full.length}`);
       return full;
     } catch (e: any) {
-      this.logger.error(`OpenRouter stream failed: ${e?.message || e}`);
+      this.logger.error(`Gemini stream failed: ${e?.message || e}`);
       return full;
     }
   }

@@ -127,7 +127,7 @@
 					>
 						<div class="entry-preview-header">
 							<div class="entry-preview-time">
-								{{ formatTime(entry.created_at) }}
+								{{ formatTime(entry.createdAt) }}
 							</div>
 							<div class="entry-preview-emotions">
 								<span
@@ -302,16 +302,15 @@ function calculateStreak(): number {
 	let streak = 1;
 	const sortedEntries = [...cbtStore.entries].sort(
 		(a, b) =>
-			new Date((b as any).createdAt || (b as any).created_at).getTime() -
-			new Date((a as any).createdAt || (a as any).created_at).getTime()
+			new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
 	);
 
 	const today = new Date();
 	today.setHours(0, 0, 0, 0);
 
 	for (let i = 0; i < sortedEntries.length - 1; i++) {
-		const currentDate = new Date(sortedEntries[i].created_at);
-		const nextDate = new Date(sortedEntries[i + 1].created_at);
+		const currentDate = new Date(sortedEntries[i].createdAt);
+		const nextDate = new Date(sortedEntries[i + 1].createdAt);
 
 		currentDate.setHours(0, 0, 0, 0);
 		nextDate.setHours(0, 0, 0, 0);
@@ -334,7 +333,7 @@ function calculateWeeklyProgress(): number {
 	const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
 	const weekEntries = cbtStore.entries.filter(
-		(entry: any) => new Date(entry.createdAt || entry.created_at) >= weekAgo
+		entry => new Date(entry.createdAt) >= weekAgo
 	);
 
 	// Предполагаем цель - 1 запись в день
@@ -351,8 +350,8 @@ function getMostFrequentEmotion(): string {
 		const thoughts = cbtStore.getEntryThoughts(entry as any);
 		thoughts.forEach((thought) => {
 			thought.emotions.forEach((emotion) => {
-				const count = emotionCount.get(emotion.emotion_id) || 0;
-				emotionCount.set(emotion.emotion_id, count + 1);
+				const count = emotionCount.get(emotion.emotionId) || 0;
+				emotionCount.set(emotion.emotionId, count + 1);
 			});
 		});
 	});
@@ -364,7 +363,7 @@ function getMostFrequentEmotion(): string {
 	);
 
 	const em = emotionsStore.getEmotionById(mostFrequent[0]);
-	return em ? (t((em as any).name_key, (em as any).name || "") as string) : "—";
+	return em ? (t(em.nameKey, em.name || "") as string) : "—";
 }
 
 function formatTime(dateStr: string): string {
@@ -399,13 +398,13 @@ function getEntryEmotions(entry: any): Array<{ id: number; name: string }> {
 
 	thoughts.forEach((thought) => {
 		thought.emotions.forEach((emotion) => {
-			const em = emotionsStore.getEmotionById(emotion.emotion_id);
+			const em = emotionsStore.getEmotionById(emotion.emotionId);
 			const emotionName = em
-				? (t((em as any).name_key, (em as any).name || "") as string)
+				? (t(em.nameKey, em.name || "") as string)
 				: "";
-			if (emotionName && !emotions.find((e) => e.id === emotion.emotion_id)) {
+			if (emotionName && !emotions.find((e) => e.id === emotion.emotionId)) {
 				emotions.push({
-					id: emotion.emotion_id,
+					id: emotion.emotionId,
 					name: emotionName,
 				});
 			}
@@ -419,19 +418,10 @@ function getEmotionColor(emotionId: number): string {
 	const emotion = emotionsStore.getEmotionById(emotionId);
 	if (!emotion) return "var(--primary)";
 
-	const colorMap: Record<number, string> = {
-		1: "var(--emotion-anger)",
-		2: "var(--emotion-fear)",
-		3: "var(--emotion-sadness)",
-		4: "var(--emotion-joy)",
-		5: "var(--emotion-shame)",
-		6: "var(--emotion-surprise)",
-	};
-
-	return (
-		colorMap[(emotion as any).categoryId || (emotion as any).category_id] ||
-		"var(--primary)"
-	);
+	// Цвет берём из каталога категорий, а не из хардкод-карты id->цвет:
+	// id категорий определяются сервером
+	const category = emotionsStore.getCategoryById(emotion.categoryId);
+	return category?.color || "var(--primary)";
 }
 
 function getEntryPreview(entry: any): string {

@@ -17,8 +17,7 @@
 		:icon="icon"
 		:icon-right="iconRight"
 		@click="onClick"
-		v-bind="touchHandlers"
-		v-bind="$attrs"
+		v-bind="mergedButtonAttrs"
 	>
 		<template v-if="$slots.default">
 			<slot />
@@ -30,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, useAttrs } from "vue";
 import { useTouchButton } from "@/composables/useTouch";
 
 interface Props {
@@ -58,9 +57,11 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-	click: [event: Event];
-	longPress?: [];
+	(e: "click", event: Event): void;
+	(e: "longPress"): void;
 }>();
+
+const attrs = useAttrs();
 
 // Маппинг наших вариантов на цвета Quasar
 const quasarColor = computed(() => {
@@ -76,7 +77,7 @@ const quasarColor = computed(() => {
 
 // Touch optimization
 const { onClick, isTouchDevice, ...touchHandlers } = useTouchButton(
-	(event) => handleClick(event),
+	(event?: Event) => handleClick(event),
 	{
 		hapticStyle: props.hapticStyle,
 		enableLongPress: props.enableLongPress,
@@ -84,9 +85,14 @@ const { onClick, isTouchDevice, ...touchHandlers } = useTouchButton(
 	}
 );
 
-function handleClick(event: Event) {
+const mergedButtonAttrs = computed(() => ({
+	...attrs,
+	...touchHandlers,
+}));
+
+function handleClick(event?: Event) {
 	if (!props.disabled && !props.loading) {
-		emit("click", event);
+		emit("click", event ?? new Event("click"));
 	}
 }
 </script>

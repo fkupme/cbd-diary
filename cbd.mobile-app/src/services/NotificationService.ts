@@ -149,7 +149,7 @@ export class NotificationService {
 
 	private async tryInitRemotePush() {
 		try {
-			if (!(globalThis as any).__TAURI__) return;
+			if (!(globalThis as any).__TAURI_INTERNALS__ && !(globalThis as any).isTauri && !(globalThis as any).__TAURI__) return;
 			const pkgName = 'tauri-plugin-remote-push' + '-api';
 			// @vite-ignore
 			const mod = await import(/* @vite-ignore */ pkgName).catch(() => null);
@@ -345,26 +345,6 @@ export class NotificationService {
 			console.log('[NotifySocket] handler attached');
 		} catch (e) {
 			console.warn('[NotifySocket] attach handler failed', e);
-		}
-	}
-
-	private async handleAction(
-		action: NotificationAction,
-		base: { title: string; body: string }
-	) {
-		if (action.id === 'remind_later') {
-			const delay = action.delayMinutes ?? 15;
-			const when = new Date(Date.now() + delay * 60_000);
-			await this.scheduleReminder({
-				...base,
-				scheduled: when,
-				channelId: 'reminders',
-			});
-			return;
-		}
-		if (action.id === 'create_entry') {
-			// Лёгкий хак: шлём браузерное событие, UI пусть обработает
-			window.dispatchEvent(new CustomEvent('cbd:create-entry'));
 		}
 	}
 

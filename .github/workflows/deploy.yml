@@ -1,0 +1,83 @@
+# Деплой бэка на VPS — по образцу olive_tatoo/.github/workflows/deploy.yml:
+# push в main -> SSH на сервер -> git pull -> .env из GitHub Secrets ->
+# миграции -> сборка -> рестарт. API публикуется Traefik'ом на ${API_DOMAIN}.
+#
+# Секреты репозитория (Settings -> Secrets and variables -> Actions):
+#   доступ к серверу: VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_PORT, GH_PAT
+#   приложение (список — cbd.web-api/.env.example, помечены [secret]):
+#     GEMINI_API_KEY, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, POSTGRES_PASSWORD
+#   опционально: CORS_ORIGIN (дефолт https://cbd-diary.ru)
+#
+# Предусловия на сервере: репо склонирован в DEPLOY_DIR, стек Traefik
+# (~/projects/traefik) запущен и создал внешнюю сеть `proxy`.
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cbd.web-api/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+env:
+  DEPLOY_DIR: /root/cbd-diary
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          envs: GH_PAT,GEMINI_API_KEY,JWT_ACCESS_SECRET,JWT_REFRESH_SECRET,POSTGRES_PASSWORD,CORS_ORIGIN
+          script: |
+            set -e
+            cd ${{ env.DEPLOY_DIR }}
+            git remote set-url origin https://x-access-token:${GH_PAT}@github.com/fkupme/cbd-diary.git
+            git pull origin main
+
+            # .env для docker compose собирается из GitHub Secrets —
+            # единственный источник истины, на сервере руками не правится
+            cat > .env <<EOF
+            POSTGRES_DB=cbd_diary
+            POSTGRES_USER=postgres
+            POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+            JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+            JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+            GEMINI_API_KEY=${GEMINI_API_KEY}
+            GEMINI_MODEL=gemini-2.5-flash
+            CORS_ORIGIN=${CORS_ORIGIN:-https://cbd-diary.ru}
+            API_DOMAIN=api.cbd-diary.ru
+            EOF
+            chmod 600 .env
+
+            # БД и кэш поднимаем первыми
+            docker compose --profile production up -d postgres redis
+
+            # Собираем прод-образ API
+            docker compose --profile production build api-prod
+
+            # Схема БД: проект ведёт её через prisma db push (как в dev).
+            # ВНИМАНИЕ: миграции 20250810_add_chat_tables/20250810_add_chats —
+            # пустые файлы, поэтому migrate deploy создал бы БД без chat-таблиц.
+            docker compose --profile production run --rm api-prod npx prisma db push --skip-generate
+
+            # Запускаем приложение
+            docker compose --profile production up -d --remove-orphans api-prod
+
+            docker image prune -f
+            echo "=== CBD Diary API deployed ==="
+            docker compose --profile production ps

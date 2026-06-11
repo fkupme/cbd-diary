@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { normalizeThoughts } from '../../common/helpers/thoughts.helper';
 import { PrismaService } from '../../database/prisma.service';
 import { EmotionsService } from '../emotions/emotions.service';
 import {
@@ -344,7 +345,7 @@ export class AnalyticsService {
             data.intensities.length
           : 0;
         const percentage = (data.count / Math.max(1, totalEmotionCount)) * 100;
-        const trend = this.calculateEmotionTrend(userId, emotion.id, query);
+        const trend = this.calculateEmotionTrend(data.times, startDate, endDate);
         const timePatterns = this.analyzeTimePatterns(data.times);
         const commonSituations = this.findCommonPatterns(data.situations, 3);
         const commonReactions = this.findCommonPatterns(data.reactions, 3);
@@ -461,8 +462,17 @@ export class AnalyticsService {
     // Анализируем когнитивные искажения
     const cognitiveDistortions = this.analyzeCognitiveDistortions(entries);
 
-    // Паттерны мыслей
-    const thoughtPatterns = this.analyzeThoughtPatterns(entries);
+    // Паттерны мыслей (имена эмоций резолвим по справочнику)
+    const emotionNames = await this.prisma.emotion.findMany({
+      select: { id: true, nameKey: true },
+    });
+    const emotionNameById = new Map<number, string>(
+      emotionNames.map((e) => [e.id, e.nameKey]),
+    );
+    const thoughtPatterns = this.analyzeThoughtPatterns(
+      entries,
+      emotionNameById,
+    );
 
     // Эффективность КПТ
     const cbtEffectiveness = this.calculateCBTEffectiveness(entries);
@@ -1089,12 +1099,25 @@ export class AnalyticsService {
   }
 
   private calculateEmotionTrend(
-    userId: string,
-    emotionId: number,
-    query: AnalyticsQueryDto,
-  ) {
-    // Пока заглушка: для MVP считаем стабильным
-    return { direction: 'stable' as const, change: 0 };
+    occurrences: Date[],
+    startDate: Date,
+    endDate: Date,
+  ): { direction: 'up' | 'down' | 'stable'; change: number } {
+    if (occurrences.length < 2) {
+      return { direction: 'stable', change: 0 };
+    }
+    const midpoint = (startDate.getTime() + endDate.getTime()) / 2;
+    let firstHalf = 0;
+    let secondHalf = 0;
+    for (const t of occurrences) {
+      if (new Date(t).getTime() < midpoint) firstHalf++;
+      else secondHalf++;
+    }
+    const change = secondHalf - firstHalf;
+    if (change === 0 || firstHalf + secondHalf < 2) {
+      return { direction: 'stable', change: 0 };
+    }
+    return { direction: change > 0 ? 'up' : 'down', change };
   }
 
   private analyzeTimePatterns(times: Date[]) {
@@ -1242,19 +1265,16 @@ export class AnalyticsService {
     const counts = new Map<string, { count: number; entryIds: string[] }>();
     let total = 0;
     for (const e of entries) {
-      const thoughts = (e.thoughts as any[]) || [];
+      const thoughts = normalizeThoughts(e.thoughts);
       const entryId = (e as any).id as string;
       for (const t of thoughts) {
-        if (Array.isArray(t?.cognitiveDistortions)) {
-          for (const d of t.cognitiveDistortions) {
-            const type = String(d.type || '').toLowerCase();
-            if (!type) continue;
-            total++;
-            const v = counts.get(type) ?? { count: 0, entryIds: [] };
-            v.count += 1;
-            if (entryId) v.entryIds.push(entryId);
-            counts.set(type, v);
-          }
+        for (const d of t.cognitiveDistortions) {
+          const type = d.type.toLowerCase();
+          total++;
+          const v = counts.get(type) ?? { count: 0, entryIds: [] };
+          v.count += 1;
+          if (entryId) v.entryIds.push(entryId);
+          counts.set(type, v);
         }
       }
     }
@@ -1269,40 +1289,30 @@ export class AnalyticsService {
       }));
   }
 
-  private analyzeThoughtPatterns(entries: any[]) {
+  private analyzeThoughtPatterns(
+    entries: any[],
+    emotionNameById: Map<number, string>,
+  ) {
     const map = new Map<
       string,
       { count: number; intensity: number[]; emotions: Map<number, number> }
     >();
     for (const e of entries) {
-      const thoughts = (e.thoughts as any[]) || [];
+      const thoughts = normalizeThoughts(e.thoughts);
       for (const t of thoughts) {
-        const text = String(t?.thought || '')
-          .trim()
-          .toLowerCase();
-        if (!text) continue;
+        const text = t.thought.toLowerCase();
         const rec = map.get(text) ?? {
           count: 0,
           intensity: [],
           emotions: new Map(),
         };
         rec.count += 1;
-        if (typeof t?.intensity === 'number') rec.intensity.push(t.intensity);
-        if (Array.isArray(t?.emotions)) {
-          for (const em of t.emotions) {
-            // попытаемся сопоставить эмоцию по id или nameKey
-            const id = this.getEmotionIdFromJson(em);
-            if (id !== null) {
-              rec.emotions.set(id, (rec.emotions.get(id) ?? 0) + 1);
-              continue;
-            }
-            const key = this.getEmotionNameKeyFromJson(em);
-            if (key) {
-              // отложенное сопоставление по ключу — просто хэшируем сам ключ
-              // (в UI эти поля не критичны, поэтому оставим id как NaN)
-              // Но чтобы не плодить NaN, пропустим — это вспомогательная метрика
-            }
-          }
+        rec.intensity.push(t.intensity);
+        for (const em of t.emotions) {
+          rec.emotions.set(
+            em.emotionId,
+            (rec.emotions.get(em.emotionId) ?? 0) + 1,
+          );
         }
         map.set(text, rec);
       }
@@ -1323,7 +1333,11 @@ export class AnalyticsService {
         commonEmotions: Array.from(v.emotions.entries())
           .sort((a, b) => b[1] - a[1])
           .slice(0, 3)
-          .map(([id, count]) => ({ id, name: String(id), count })),
+          .map(([id, count]) => ({
+            id,
+            name: emotionNameById.get(id) ?? String(id),
+            count,
+          })),
       }));
     return patterns;
   }
@@ -1388,11 +1402,14 @@ export class AnalyticsService {
     startDate: Date,
     endDate: Date,
   ) {
-    const entries = await this.prisma.cbtEntry.findMany({
-      where: { userId, entryDate: { gte: startDate, lte: endDate } },
-      select: { moodScoreBefore: true },
-      orderBy: { entryDate: 'asc' },
-    });
+    const [entries, activeEmotionsCount] = await Promise.all([
+      this.prisma.cbtEntry.findMany({
+        where: { userId, entryDate: { gte: startDate, lte: endDate } },
+        select: { moodScoreBefore: true, moodScoreAfter: true, thoughts: true },
+        orderBy: { entryDate: 'asc' },
+      }),
+      this.prisma.emotion.count({ where: { isActive: true } }),
+    ]);
     const consistency = Math.min(100, Math.round((entries.length / 30) * 100));
     const moodStability =
       entries.length > 1
@@ -1404,11 +1421,41 @@ export class AnalyticsService {
               ),
           )
         : 0;
+
+    // Осознанность: насколько разнообразно пользователь различает эмоции.
+    // Доля уникальных эмоций от справочника даёт слишком малые числа (119 эмоций),
+    // поэтому насыщение наступает на 20 уникальных эмоциях.
+    const uniqueEmotionIds = new Set<number>();
+    for (const e of entries) {
+      for (const t of normalizeThoughts(e.thoughts)) {
+        for (const em of t.emotions) uniqueEmotionIds.add(em.emotionId);
+      }
+    }
+    const awarenessSaturation = Math.min(20, Math.max(1, activeEmotionsCount));
+    const emotionalAwareness = Math.min(
+      100,
+      Math.round((uniqueEmotionIds.size / awarenessSaturation) * 100),
+    );
+
+    // Навык совладания: доля записей, где настроение после работы с записью выросло
+    const withAfter = entries.filter(
+      (e) => typeof e.moodScoreAfter === 'number',
+    );
+    const copingSkills = withAfter.length
+      ? Math.round(
+          (withAfter.filter(
+            (e) => (e.moodScoreAfter as number) > (e.moodScoreBefore ?? 0),
+          ).length /
+            withAfter.length) *
+            100,
+        )
+      : 0;
+
     return {
       consistency,
       moodStability,
-      emotionalAwareness: 0,
-      copingSkills: 0,
+      emotionalAwareness,
+      copingSkills,
     };
   }
 

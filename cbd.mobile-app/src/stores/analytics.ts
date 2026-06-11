@@ -104,20 +104,20 @@ export const useAnalyticsStore = defineStore('analytics', () => {
 		entries.forEach(entry => {
 			entry.thoughts.forEach(thought => {
 				thought.emotions.forEach(emotion => {
-					emotionCounts[emotion.emotion_id] =
-						(emotionCounts[emotion.emotion_id] || 0) + 1;
+					emotionCounts[emotion.emotionId] =
+						(emotionCounts[emotion.emotionId] || 0) + 1;
 				});
 			});
 		});
 
-		const topEmotions = Object.entries(emotionCounts)
+		const topEmotions: EmotionStat[] = Object.entries(emotionCounts)
 			.sort(([, a], [, b]) => b - a)
 			.slice(0, 5)
 			.map(([emotionId, count]) => {
 				const emotion = emotionsStore.getEmotionById(Number(emotionId));
 				return {
-					emotion_id: Number(emotionId),
-					emotion_name: emotion?.name || 'Unknown',
+					emotionId: Number(emotionId),
+					emotionName: emotion?.name || 'Unknown',
 					count,
 					percentage: (count / totalEntries) * 100,
 				};
@@ -146,25 +146,12 @@ export const useAnalyticsStore = defineStore('analytics', () => {
 		};
 	});
 
-	// Combined analytics (API + local)
-	const combinedStats = computed(() => {
-		if (userStats.value) {
-			return userStats.value;
-		}
-
-		// Fallback to local analytics
-		return {
-			totalEntries: localAnalytics.value.totalEntries,
-			averageMoodScore: localAnalytics.value.averageMoodBefore,
-			moodImprovement: localAnalytics.value.moodImprovement,
-			weeklyProgress: localAnalytics.value.weeklyProgress,
-			streakDays: 0, // This would come from API
-			lastEntryDate: cbtStore.entries[0]?.createdAt || null,
-			emotionStats: localAnalytics.value.topEmotions as EmotionStat[],
-			moodTrends: localAnalytics.value.moodTrends as MoodTrend[],
-			cognitiveInsights: localAnalytics.value.insights as CognitiveInsight[],
-		};
-	});
+	// Combined analytics: серверная статистика, если загрузилась, плюс
+	// локальная агрегация — в РАЗНЫХ полях, чтобы форма не зависела от источника.
+	const combinedStats = computed(() => ({
+		server: userStats.value ?? null,
+		local: localAnalytics.value,
+	}));
 
 	// Helper functions for local analytics
 	const generateMoodTrends = (entries: any[]): MoodTrend[] => {

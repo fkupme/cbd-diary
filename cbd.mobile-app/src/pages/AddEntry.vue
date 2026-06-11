@@ -285,21 +285,23 @@ const canSave = computed(() => {
 });
 
 // Computed свойства для совместимости с компонентом колеса эмоций
+// (колесо ждёт name_key/category_id — отдаём их из канонических полей)
 const emotionCategoriesForWheel = computed<any[]>(() =>
-	emotionsStore.emotionCategories.map((cat: any) => {
-		const key = cat.name_key ?? cat.nameKey ?? cat.name_key;
-		const name = t(key as string, cat.name || "");
-		return { ...cat, name, name_key: key };
+	emotionsStore.emotionCategories.map(cat => {
+		const name = t(cat.nameKey, cat.name || "");
+		return { ...cat, name, name_key: cat.nameKey };
 	})
 );
 
 const emotionsForWheel = computed<any[]>(() =>
-	emotionsStore.emotions.map((emotion: any) => {
-		const key = emotion.name_key ?? emotion.nameKey ?? emotion.name_key;
-		const name = t(key as string, emotion.name || "");
-		const category_id =
-			emotion.category_id ?? emotion.categoryId ?? emotion.categoryid;
-		return { ...emotion, name, name_key: key, category_id };
+	emotionsStore.emotions.map(emotion => {
+		const name = t(emotion.nameKey, emotion.name || "");
+		return {
+			...emotion,
+			name,
+			name_key: emotion.nameKey,
+			category_id: emotion.categoryId,
+		};
 	})
 );
 
@@ -332,7 +334,7 @@ function onEmotionSelected(emotion: any) {
 		// Получаем переведенное название эмоции
 		const emotionData = emotionsStore.getEmotionById(emotion.emotionId);
 		const translatedName = emotionData
-			? t(emotionData.name_key)
+			? t(emotionData.nameKey)
 			: emotion.emotionName;
 
 		chain.emotions.push({
@@ -447,17 +449,16 @@ async function loadData() {
 			console.log("Categories:", emotionsStore.emotionCategories.length);
 			console.log("Emotions:", emotionsStore.emotions.length);
 			for (const cat of emotionsStore.emotionCategories) {
-				const byCat = emotionsStore.emotions.filter((e: any) => {
-					const cid = (e.categoryId ?? e.category_id ?? e.categoryid) as number;
-					return Number(cid) === Number(cat.id);
-				});
+				const byCat = emotionsStore.emotions.filter(
+					e => e.categoryId === cat.id
+				);
 				console.log(
-					`[${cat.id}] ${cat.name_key || cat.name}`,
+					`[${cat.id}] ${cat.nameKey}`,
 					byCat.length,
-					byCat.slice(0, 3).map((e: any) => ({
+					byCat.slice(0, 3).map(e => ({
 						id: e.id,
-						key: e.name_key || e.name,
-						cat: e.categoryId ?? e.category_id ?? e.categoryid,
+						key: e.nameKey,
+						cat: e.categoryId,
 					}))
 				);
 			}

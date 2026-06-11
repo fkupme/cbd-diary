@@ -689,6 +689,15 @@ async function main() {
   await prisma.emotion.deleteMany();
   await prisma.emotionCategory.deleteMany();
 
+  // Сбрасываем sequence, чтобы ID категорий/эмоций были стабильны (1..N)
+  // при каждом пересиде: на эти ID ссылаются записи и локальные каталоги клиентов.
+  await prisma.$executeRawUnsafe(
+    `SELECT setval(pg_get_serial_sequence('emotion_categories','id'), 1, false)`,
+  );
+  await prisma.$executeRawUnsafe(
+    `SELECT setval(pg_get_serial_sequence('emotions','id'), 1, false)`,
+  );
+
   const cats = [
     {
       key: 'emotion_category.anger',
@@ -752,21 +761,21 @@ async function main() {
     },
   ];
 
-  const createdCats = await Promise.all(
-    cats.map((c) =>
-      prisma.emotionCategory.create({
-        data: {
-          nameKey: c.key,
-          color: c.color,
-          icon: c.icon,
-          sortOrder: c.sort,
-          isActive: true,
-        },
-      }),
-    ),
-  );
+  // Создаём строго последовательно: Promise.all раздаёт autoincrement-ID
+  // в порядке гонки, и сопоставление id->категория плывёт от сида к сиду.
   const catId: Record<string, number> = {};
-  createdCats.forEach((c) => (catId[c.nameKey] = c.id));
+  for (const c of cats) {
+    const created = await prisma.emotionCategory.create({
+      data: {
+        nameKey: c.key,
+        color: c.color,
+        icon: c.icon,
+        sortOrder: c.sort,
+        isActive: true,
+      },
+    });
+    catId[created.nameKey] = created.id;
+  }
 
   const angerRu = [
     'Холодность',

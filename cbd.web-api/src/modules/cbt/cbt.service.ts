@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { normalizeThoughts } from '../../common/helpers/thoughts.helper';
 import { PaginationMetadata } from '../../common/types/api-response.type';
 import { PrismaService } from '../../database/prisma.service';
 import {
@@ -35,7 +36,7 @@ export class CbtService {
           userId,
           entryDate,
           situation: data.situation,
-          thoughts: data.thoughts as unknown as Prisma.JsonArray,
+          thoughts: normalizeThoughts(data.thoughts) as unknown as Prisma.JsonArray,
           reactions: data.reactions,
           moodScoreBefore: data.mood_score_before,
           moodScoreAfter: data.mood_score_after,
@@ -213,7 +214,9 @@ export class CbtService {
         updateData.situation = data.situation;
       }
       if (data.thoughts) {
-        updateData.thoughts = data.thoughts as unknown as Prisma.JsonArray;
+        updateData.thoughts = normalizeThoughts(
+          data.thoughts,
+        ) as unknown as Prisma.JsonArray;
       }
       if (data.reactions) {
         updateData.reactions = data.reactions;

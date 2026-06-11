@@ -24,22 +24,26 @@ impl Database {
             
             // Проверяем существует ли родительская директория
             if let Some(parent_dir) = std::path::Path::new(file_path).parent() {
-                log::info!("📁 Родительская директория: {}", parent_dir.display());
+                if parent_dir.as_os_str().is_empty() {
+                    log::info!("📁 Файл БД находится в текущей директории");
+                } else {
+                    log::info!("📁 Родительская директория: {}", parent_dir.display());
                 
-                if !parent_dir.exists() {
-                    log::warn!("⚠️ Родительская директория не существует, создаем: {}", parent_dir.display());
-                    std::fs::create_dir_all(parent_dir)
-                        .map_err(|e| sqlx::Error::Io(e))?;
-                }
-                
-                // Проверяем права доступа к директории
-                match std::fs::metadata(parent_dir) {
-                    Ok(metadata) => {
-                        log::info!("✅ Директория доступна, права: {:?}", metadata.permissions());
-                    },
-                    Err(e) => {
-                        log::error!("❌ Ошибка доступа к директории: {}", e);
-                        return Err(sqlx::Error::Io(e));
+                    if !parent_dir.exists() {
+                        log::warn!("⚠️ Родительская директория не существует, создаем: {}", parent_dir.display());
+                        std::fs::create_dir_all(parent_dir)
+                            .map_err(|e| sqlx::Error::Io(e))?;
+                    }
+                    
+                    // Проверяем права доступа к директории
+                    match std::fs::metadata(parent_dir) {
+                        Ok(metadata) => {
+                            log::info!("✅ Директория доступна, права: {:?}", metadata.permissions());
+                        },
+                        Err(e) => {
+                            log::error!("❌ Ошибка доступа к директории: {}", e);
+                            return Err(sqlx::Error::Io(e));
+                        }
                     }
                 }
             }
@@ -88,20 +92,10 @@ impl Database {
     
     async fn seed_initial_data(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         log::info!("🌱 Заполняем начальные данные...");
-        
-        // Проверяем категории эмоций
-        let category_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM emotion_categories")
-            .fetch_one(pool)
-            .await?;
 
-        if category_count == 0 {
-            log::info!("📝 Заполняем категории эмоций...");
-            queries::seed_emotion_categories(pool).await?;
-        } else {
-            log::info!("ℹ️ Категории эмоций уже существуют ({} шт.)", category_count);
-        }
-        
-        // Эмоции больше не сидим локально — приходят из сервера и синкаются в SQLite
+        // Каталог эмоций и категорий локально НЕ сидится: источник истины — сервер.
+        // Каталог приезжает командой sync_emotions_from_server после логина
+        // (с серверными id) и дальше живёт в SQLite для офлайна.
         let emotion_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM emotions")
             .fetch_one(pool)
             .await?;
@@ -112,7 +106,7 @@ impl Database {
             .fetch_one(pool)
             .await?;
             
-        if translation_count < 50 {
+        if translation_count == 0 {
             log::info!("📝 Заполняем переводы... (текущее количество: {})", translation_count);
             queries::seed_translations(pool).await?;
         } else {
@@ -128,33 +122,4 @@ impl Database {
     }
 }
 
-// Утилиты для получения правильного пути к БД
-pub fn get_database_path() -> Result<String, Box<dyn std::error::Error>> {
-    #[cfg(target_os = "android")]
-    {
-        // На Android используем внутреннее хранилище приложения
-        Ok("sqlite:cbd_diary.db".to_string())
-    }
-    
-    #[cfg(target_os = "ios")]
-    {
-        // На iOS используем Documents директорию
-        use tauri::api::path;
-        let app_data_dir = path::app_data_dir(&tauri::Config::default())
-            .ok_or("Failed to get app data directory")?;
-        let db_path = app_data_dir.join("cbd_diary.db");
-        
-        // Создаём родительскую директорию
-        if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        
-        Ok(format!("sqlite:{}", db_path.to_string_lossy()))
-    }
-    
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        // Desktop - используем текущую директорию
-        Ok("sqlite:cbd_diary.db".to_string())
-    }
-} 
+// Путь к БД резолвится через get_database_path_for_app (lib.rs, Tauri 2 path API).

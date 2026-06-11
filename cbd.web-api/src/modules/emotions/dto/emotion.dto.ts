@@ -84,6 +84,7 @@ export class EmotionResponseDto {
   // Связанные данные
   category?: {
     id: number;
+    nameKey: string;
     name: string;
     color: string;
     icon?: string;

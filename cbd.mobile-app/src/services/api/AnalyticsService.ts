@@ -338,7 +338,7 @@ export class AnalyticsService {
 			// Анализируем изменения эмоций
 			const emotionChanges = currentEmotions.data.map(currentEmotion => {
 				const previousEmotion = previousEmotions.data.find(
-					prev => prev.emotion.id === currentEmotion.emotion.id
+					prev => prev.emotionId === currentEmotion.emotionId
 				);
 
 				const changePercent = previousEmotion
@@ -348,7 +348,7 @@ export class AnalyticsService {
 					: 100; // Если эмоции не было в предыдущем периоде
 
 				return {
-					emotion: currentEmotion.emotion.name,
+					emotion: currentEmotion.emotionName,
 					changePercent: Number(changePercent.toFixed(1)),
 				};
 			});

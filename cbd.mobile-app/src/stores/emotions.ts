@@ -61,8 +61,8 @@ export const useEmotionsStore = defineStore('emotions', () => {
 		return emotions.value.filter(
 			emotion =>
 				emotion.name.toLowerCase().includes(lowerQuery) ||
-				(emotion.name_key &&
-					emotion.name_key.toLowerCase().includes(lowerQuery))
+				(emotion.nameKey &&
+					emotion.nameKey.toLowerCase().includes(lowerQuery))
 		);
 	};
 
@@ -179,9 +179,8 @@ export const useEmotionsStore = defineStore('emotions', () => {
 
 	// Helper functions for UI
 	const getEmotionColor = (emotionId: number): string => {
+		// Цвет задаётся на уровне категории (как в каталоге на сервере)
 		const emotion = getEmotionById(emotionId);
-		if (emotion?.color) return emotion.color;
-
 		const category = emotion ? getCategoryById(emotion.categoryId) : null;
 		return category?.color || '#6B7280'; // default gray
 	};
@@ -198,7 +197,7 @@ export const useEmotionsStore = defineStore('emotions', () => {
 
 	const getCategoryEmoji = (categoryId: number): string => {
 		const category = getCategoryById(categoryId);
-		return category?.emoji || '📁';
+		return category?.icon || '📁';
 	};
 
 	// Validation helpers

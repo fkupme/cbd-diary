@@ -5,7 +5,6 @@ import {
 	NotificationService,
 	SecureStorageService,
 } from './index';
-import type { MoodEntry } from './types';
 
 export class ServiceManager {
 	private static instance: ServiceManager;
@@ -86,9 +85,11 @@ export class ServiceManager {
 		}
 
 		try {
-			results.biometric = await this.biometric.initialize();
+			// У биометрии нет отдельного initialize — проверяем доступность
+			const bio = await this.biometric.checkAvailability();
+			results.biometric = bio.isAvailable;
 			if (!results.biometric)
-				errors.push('BiometricService не удалось инициализировать');
+				errors.push('BiometricService: биометрия недоступна на устройстве');
 		} catch (error) {
 			results.biometric = false;
 			errors.push(`BiometricService: ${error}`);
@@ -128,37 +129,8 @@ export class ServiceManager {
 	}
 
 	// === ОСНОВНЫЕ МЕТОДЫ ===
-
-	async saveMoodEntry(entry: Omit<MoodEntry, 'id' | 'userId'>): Promise<{
-		success: boolean;
-		id?: number;
-		synced?: boolean;
-	}> {
-		try {
-			if (!this.currentUserId) {
-				throw new Error('Пользователь не установлен');
-			}
-
-			const moodEntry = {
-				...entry,
-				userId: this.currentUserId,
-			};
-
-			// Сохраняем локально
-			const id = await this.database.saveMoodEntry(moodEntry);
-			if (!id) {
-				throw new Error('Не удалось сохранить в базу данных');
-			}
-
-			// Отправляем уведомление
-			await this.notification.notifyEntryComplete();
-
-			return { success: true, id };
-		} catch (error) {
-			console.error('❌ Ошибка сохранения записи:', error);
-			return { success: false };
-		}
-	}
+	// Записи дневника создаются через cbtStore -> DatabaseService.createCBTEntry;
+	// легаси-метод saveMoodEntry (несуществующая mood_entries-модель) удалён.
 
 	setCurrentUser(userId: string): void {
 		this.currentUserId = userId;

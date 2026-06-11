@@ -3,7 +3,7 @@
  * Provides touch event handling and haptic feedback for mobile devices
  */
 
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted } from 'vue';
 
 export interface TouchOptions {
   enableHaptic?: boolean;
@@ -180,7 +180,7 @@ export function useTouch(options: TouchOptions = {}) {
   ) => {
     let timeoutId: number | null = null;
 
-    const start = (event: TouchEvent) => {
+    const start = () => {
       timeoutId = window.setTimeout(() => {
         if (hapticOnTrigger && enableHaptic) {
           triggerHaptic('heavy');
@@ -295,7 +295,7 @@ export function useTouch(options: TouchOptions = {}) {
  * Touch-optimized button composable
  */
 export function useTouchButton(
-  callback: () => void,
+  callback: (event?: Event) => void,
   options: {
     hapticStyle?: 'light' | 'medium' | 'heavy';
     enableLongPress?: boolean;
@@ -310,18 +310,19 @@ export function useTouchButton(
     longPressThreshold = 500,
   } = options;
 
-  const { handleButtonPress, useLongPress } = useTouch({ hapticStyle });
+  const { handleButtonPress, useLongPress, isTouchDevice } = useTouch({ hapticStyle });
 
   const longPress = enableLongPress && longPressCallback
     ? useLongPress(longPressCallback, longPressThreshold)
     : {};
 
-  const onClick = () => {
-    handleButtonPress(callback, hapticStyle);
+  const onClick = (event?: Event) => {
+    handleButtonPress(() => callback(event), hapticStyle);
   };
 
   return {
     onClick,
+    isTouchDevice,
     ...longPress,
   };
 }

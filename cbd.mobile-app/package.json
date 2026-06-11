@@ -4,9 +4,12 @@
 	"version": "0.1.0",
 	"type": "module",
 	"scripts": {
+		"start": ". \"$HOME/.cargo/env\" 2>/dev/null || true; export JAVA_HOME=\"/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home\"; export ANDROID_HOME=\"/usr/local/share/android-commandlinetools\"; export ANDROID_SDK_ROOT=\"$ANDROID_HOME\"; export PATH=\"$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH\"; export NDK_HOME=\"${NDK_HOME:-$ANDROID_HOME/ndk/27.3.13750724}\"; export VITE_API_BASE_URL=\"${VITE_API_BASE_URL:-http://localhost:3002/api/v1}\"; npm run start:containers && (adb reverse tcp:3002 tcp:3002 >/dev/null 2>&1 || true) && npm run android:dev",
+		"start:containers": "cd .. && POSTGRES_HOST_PORT=${POSTGRES_HOST_PORT:-5433} docker compose --env-file .env.development up -d postgres redis api-dev",
 		"dev": "vite",
 		"dev:lan": "vite --host 0.0.0.0 --port 5173",
 		"build": "vue-tsc --noEmit && vite build",
+		"build:tauri": "vite build",
 		"preview": "vite preview",
 		"tauri": "tauri",
 		"tauri:dev": "tauri dev",

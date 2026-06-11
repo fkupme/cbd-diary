@@ -1,7 +1,10 @@
 import type {
 	Emotion as ApiEmotion,
 	EmotionCategory as ApiEmotionCategory,
+	CBTEmotion,
 	CBTEntry,
+	CBTThought,
+	CognitiveDistortion,
 	CreateCBTEntryRequest,
 	UpdateCBTEntryRequest,
 } from './api/types';
@@ -89,10 +92,63 @@ interface TauriUpdateCBTEntryInput {
 	tags?: string[];
 }
 
+// Приводит мысль из локального хранилища (Rust сериализует snake_case,
+// старые записи могли хранить искажения строками) к каноническому camelCase.
+// Дальше по приложению живёт ТОЛЬКО канонический вид — это та же форма,
+// которую отдаёт бэк после thoughts.helper.ts.
+function normalizeThoughtFromStorage(raw: any): CBTThought {
+	const emotions: CBTEmotion[] = Array.isArray(raw?.emotions)
+		? raw.emotions
+				.map((em: any): CBTEmotion | null => {
+					const emotionId = Number(em?.emotionId ?? em?.emotion_id);
+					if (!Number.isInteger(emotionId) || emotionId <= 0) return null;
+					const ref: CBTEmotion = {
+						emotionId,
+						intensity: Number(em?.intensity ?? 5),
+					};
+					const duration = em?.durationMinutes ?? em?.duration_minutes;
+					if (typeof duration === 'number') ref.durationMinutes = duration;
+					return ref;
+				})
+				.filter((em: CBTEmotion | null): em is CBTEmotion => em !== null)
+		: [];
+
+	const rawDistortions = raw?.cognitiveDistortions ?? raw?.cognitive_distortions;
+	const cognitiveDistortions: CognitiveDistortion[] = Array.isArray(
+		rawDistortions
+	)
+		? rawDistortions
+				.map((d: any): CognitiveDistortion | null => {
+					if (typeof d === 'string') {
+						return d.trim() ? { type: d.trim() } : null;
+					}
+					const type = String(d?.type ?? '').trim();
+					if (!type) return null;
+					const item: CognitiveDistortion = { type };
+					if (typeof d?.note === 'string' && d.note.trim()) item.note = d.note;
+					return item;
+				})
+				.filter(
+					(d: CognitiveDistortion | null): d is CognitiveDistortion =>
+						d !== null
+				)
+		: [];
+
+	return {
+		id: typeof raw?.id === 'string' ? raw.id : undefined,
+		thought: String(raw?.thought ?? ''),
+		isAutomatic: Boolean(raw?.isAutomatic ?? raw?.is_automatic ?? false),
+		intensity: Number(raw?.intensity ?? 5),
+		emotions,
+		cognitiveDistortions,
+	};
+}
+
 function mapTauriEntryToApi(e: TauriCBTEntry): CBTEntry {
-	let thoughts: any[] = [];
+	let rawThoughts: any[] = [];
 	try {
-		thoughts = JSON.parse(e.thoughts || '[]');
+		const parsed = JSON.parse(e.thoughts || '[]');
+		if (Array.isArray(parsed)) rawThoughts = parsed;
 	} catch {}
 	let tags: string[] = [];
 	try {
@@ -103,7 +159,7 @@ function mapTauriEntryToApi(e: TauriCBTEntry): CBTEntry {
 		id: e.id,
 		userId: e.user_id,
 		situation: e.situation,
-		thoughts: thoughts,
+		thoughts: rawThoughts.map(normalizeThoughtFromStorage),
 		reactions: e.reactions,
 		moodScoreBefore: (e.mood_score_before ?? 0) as number,
 		moodScoreAfter: e.mood_score_after ?? undefined,
@@ -119,17 +175,18 @@ function mapCreateReqToTauri(
 	input: CreateCBTEntryRequest
 ): TauriCreateCBTEntryInput {
 	return {
-		entry_date: (input as any).entry_date || (input as any).entryDate,
+		entry_date: (input as any).entryDate,
 		situation: input.situation,
 		thoughts: input.thoughts.map(t => ({
 			thought: t.thought,
 			is_automatic: t.isAutomatic ?? false,
 			intensity: t.intensity,
 			emotions: t.emotions.map(e => ({
-				emotion_id: (e as any).emotionId ?? (e as any).emotion_id,
+				emotion_id: e.emotionId,
 				intensity: e.intensity,
 			})),
-			cognitive_distortions: (t.cognitiveDistortions as any) || [],
+			// Rust-модель хранит искажения строками-типами
+			cognitive_distortions: (t.cognitiveDistortions ?? []).map(d => d.type),
 		})),
 		reactions: input.reactions,
 		mood_score_before: input.moodScoreBefore,
@@ -150,15 +207,15 @@ function mapUpdateReqToTauri(
 	if (input.tags !== undefined) out.tags = input.tags;
 	// Мысли апдейтим только если пришли
 	if ((input as any).thoughts) {
-		out.thoughts = ((input as any).thoughts as any[]).map(t => ({
+		out.thoughts = ((input as any).thoughts as CBTThought[]).map(t => ({
 			thought: t.thought,
 			is_automatic: t.isAutomatic ?? false,
 			intensity: t.intensity,
-			emotions: t.emotions.map((e: any) => ({
-				emotion_id: (e as any).emotionId ?? e.emotion_id,
+			emotions: t.emotions.map(e => ({
+				emotion_id: e.emotionId,
 				intensity: e.intensity,
 			})),
-			cognitive_distortions: t.cognitiveDistortions || [],
+			cognitive_distortions: (t.cognitiveDistortions ?? []).map(d => d.type),
 		}));
 	}
 	return out;
@@ -167,28 +224,36 @@ function mapUpdateReqToTauri(
 function mapTauriCategoryToApi(c: TauriEmotionCategory): ApiEmotionCategory {
 	return {
 		id: c.id,
-		name: c.name_key, // UI заменит через t(name_key)
-		name_key: c.name_key,
+		nameKey: c.name_key,
+		name: c.name_key, // UI заменит через t(nameKey)
 		color: c.color,
-		emoji: c.icon ?? undefined,
+		icon: c.icon ?? undefined,
 		sortOrder: c.sort_order,
+		isActive: c.is_active,
 		createdAt: c.created_at,
-		updatedAt: c.created_at,
 	};
 }
 
 function mapTauriEmotionToApi(e: TauriEmotion): ApiEmotion {
+	let synonyms: string[] = [];
+	try {
+		const parsed = JSON.parse(e.synonyms || '[]');
+		if (Array.isArray(parsed)) {
+			synonyms = parsed.filter((s: any) => typeof s === 'string');
+		}
+	} catch {}
 	return {
 		id: e.id,
 		categoryId: e.category_id,
-		name: e.name_key, // UI заменит через t(name_key)
-		name_key: e.name_key,
-		intensity: e.intensity_default,
+		nameKey: e.name_key,
+		name: e.name_key, // UI заменит через t(nameKey)
 		emoji: e.emoji,
-		color: undefined,
+		intensityDefault: e.intensity_default,
+		synonyms,
+		oppositeEmotionId: e.opposite_emotion_id ?? null,
 		sortOrder: e.sort_order,
+		isActive: e.is_active,
 		createdAt: e.created_at,
-		updatedAt: e.created_at,
 		category: undefined,
 	};
 }

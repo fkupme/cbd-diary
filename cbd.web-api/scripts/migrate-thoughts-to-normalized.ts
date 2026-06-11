@@ -69,7 +69,7 @@ async function migrateThoughtsToNormalizedTables() {
             continue;
           }
         } else if (Array.isArray(entry.thoughts)) {
-          thoughtsData = entry.thoughts as OldThoughtChain[];
+	          thoughtsData = entry.thoughts as unknown as OldThoughtChain[];
         } else {
           console.warn(`⚠️ Unexpected thoughts format for entry ${entry.id}`);
           skippedEntries++;

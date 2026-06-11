@@ -62,8 +62,10 @@ export class EmotionsController {
     description: 'Список категорий эмоций',
     type: [EmotionCategoryResponseDto],
   })
-  async findAllCategories(): Promise<EmotionCategoryResponseDto[]> {
-    return this.emotionsService.findAllCategories();
+  async findAllCategories(
+    @Query('language') language?: string,
+  ): Promise<EmotionCategoryResponseDto[]> {
+    return this.emotionsService.findAllCategories(language ?? 'ru');
   }
 
   @Get('categories/:id')
@@ -94,8 +96,9 @@ export class EmotionsController {
   })
   async findCategoryById(
     @Param('id', ParseIntPipe) id: number,
+    @Query('language') language?: string,
   ): Promise<EmotionCategoryResponseDto> {
-    return this.emotionsService.findCategoryById(id);
+    return this.emotionsService.findCategoryById(id, language ?? 'ru');
   }
 
   @Post('categories')
@@ -284,8 +287,9 @@ export class EmotionsController {
   })
   async findEmotionById(
     @Param('id', ParseIntPipe) id: number,
+    @Query('language') language?: string,
   ): Promise<EmotionResponseDto> {
-    return this.emotionsService.findEmotionById(id);
+    return this.emotionsService.findEmotionById(id, language ?? 'ru');
   }
 
   @Post()

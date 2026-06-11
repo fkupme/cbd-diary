@@ -16,9 +16,11 @@
 				{ "url": "https://api.cbd-diary.com/*" },
 				{ "url": "http://localhost:*" },
 				{ "url": "http://127.0.0.1:*" },
-				{ "url": "http://192.168.100.12:3002/*" },
+				{ "url": "http://10.0.2.2:*" },
+				{ "url": "http://host.docker.internal:*" },
 				{ "url": "http://192.168.*:*" },
 				{ "url": "http://10.*:*" },
+				{ "url": "http://172.*:*" },
 				{ "url": "https://*.typicode.com/*" }
 			]
 		},

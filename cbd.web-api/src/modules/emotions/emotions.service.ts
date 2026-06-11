@@ -26,20 +26,47 @@ interface PaginatedResult<T> {
 export class EmotionsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Переводы name_key -> локализованное имя; при отсутствии перевода
+  // клиент получает сам ключ (мобильный словарь умеет переводить ключи сам).
+  private async getTranslationsMap(
+    keys: string[],
+    language: string,
+  ): Promise<Map<string, string>> {
+    if (!keys.length) return new Map();
+    const rows = await this.prisma.translation.findMany({
+      where: {
+        translationKey: { in: Array.from(new Set(keys)) },
+        languageCode: language,
+      },
+      select: { translationKey: true, translationValue: true },
+    });
+    return new Map(rows.map((r) => [r.translationKey, r.translationValue]));
+  }
+
   // === EMOTION CATEGORIES ===
 
-  async findAllCategories(): Promise<EmotionCategoryResponseDto[]> {
+  async findAllCategories(
+    language = 'ru',
+  ): Promise<EmotionCategoryResponseDto[]> {
     const categories = await this.prisma.emotionCategory.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
     });
 
+    const names = await this.getTranslationsMap(
+      categories.map((c) => c.nameKey),
+      language,
+    );
+
     return categories.map((category) =>
-      this.mapCategoryToResponseDto(category),
+      this.mapCategoryToResponseDto(category, names),
     );
   }
 
-  async findCategoryById(id: number): Promise<EmotionCategoryResponseDto> {
+  async findCategoryById(
+    id: number,
+    language = 'ru',
+  ): Promise<EmotionCategoryResponseDto> {
     const category = await this.prisma.emotionCategory.findUnique({
       where: { id },
     });
@@ -48,7 +75,8 @@ export class EmotionsService {
       throw new NotFoundException(`Категория эмоций с ID ${id} не найдена`);
     }
 
-    return this.mapCategoryToResponseDto(category);
+    const names = await this.getTranslationsMap([category.nameKey], language);
+    return this.mapCategoryToResponseDto(category, names);
   }
 
   async createCategory(
@@ -161,8 +189,12 @@ export class EmotionsService {
         include: { category: true },
         orderBy: [{ categoryId: 'asc' }, { sortOrder: 'asc' }],
       });
+      const names = await this.getTranslationsMap(
+        emotions.flatMap((e) => [e.nameKey, e.category?.nameKey ?? '']),
+        language,
+      );
       const mappedEmotions = emotions.map((emotion) =>
-        this.mapEmotionToResponseDto(emotion),
+        this.mapEmotionToResponseDto(emotion, names),
       );
       const total = mappedEmotions.length;
       const metadata: PaginationMetadata = {
@@ -193,8 +225,12 @@ export class EmotionsService {
       this.prisma.emotion.count({ where }),
     ]);
 
+    const names = await this.getTranslationsMap(
+      emotions.flatMap((e) => [e.nameKey, e.category?.nameKey ?? '']),
+      language,
+    );
     const mappedEmotions = emotions.map((emotion) =>
-      this.mapEmotionToResponseDto(emotion),
+      this.mapEmotionToResponseDto(emotion, names),
     );
 
     const metadata: PaginationMetadata = {
@@ -212,7 +248,7 @@ export class EmotionsService {
     };
   }
 
-  async findEmotionById(id: number): Promise<EmotionResponseDto> {
+  async findEmotionById(id: number, language = 'ru'): Promise<EmotionResponseDto> {
     const emotion = await this.prisma.emotion.findUnique({
       where: { id },
       include: {
@@ -224,7 +260,11 @@ export class EmotionsService {
       throw new NotFoundException(`Эмоция с ID ${id} не найдена`);
     }
 
-    return this.mapEmotionToResponseDto(emotion);
+    const names = await this.getTranslationsMap(
+      [emotion.nameKey, emotion.category?.nameKey ?? ''],
+      language,
+    );
+    return this.mapEmotionToResponseDto(emotion, names);
   }
 
   async createEmotion(
@@ -325,11 +365,14 @@ export class EmotionsService {
   }
 
   // === MAPPERS ===
-  private mapCategoryToResponseDto(category: any): EmotionCategoryResponseDto {
+  private mapCategoryToResponseDto(
+    category: any,
+    names?: Map<string, string>,
+  ): EmotionCategoryResponseDto {
     return {
       id: category.id,
       nameKey: category.nameKey,
-      name: category.nameKey,
+      name: names?.get(category.nameKey) ?? category.nameKey,
       color: category.color,
       icon: category.icon || undefined,
       sortOrder: category.sortOrder,
@@ -338,12 +381,15 @@ export class EmotionsService {
     };
   }
 
-  private mapEmotionToResponseDto(emotion: any): EmotionResponseDto {
+  private mapEmotionToResponseDto(
+    emotion: any,
+    names?: Map<string, string>,
+  ): EmotionResponseDto {
     return {
       id: emotion.id,
       categoryId: emotion.categoryId,
       nameKey: emotion.nameKey,
-      name: emotion.nameKey,
+      name: names?.get(emotion.nameKey) ?? emotion.nameKey,
       emoji: emotion.emoji,
       intensityDefault: emotion.intensityDefault,
       synonyms: Array.isArray(emotion.synonyms) ? emotion.synonyms : [],
@@ -354,7 +400,8 @@ export class EmotionsService {
       category: emotion.category
         ? {
             id: emotion.category.id,
-            name: emotion.category.nameKey,
+            nameKey: emotion.category.nameKey,
+            name: names?.get(emotion.category.nameKey) ?? emotion.category.nameKey,
             color: emotion.category.color,
             icon: emotion.category.icon || undefined,
           }

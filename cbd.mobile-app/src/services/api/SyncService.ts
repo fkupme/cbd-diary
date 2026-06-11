@@ -48,10 +48,10 @@ export class SyncService {
 			if (!response.success) {
 				console.error(
 					'❌ Синхронизация не удалась:',
-					response.status,
+					response.message,
 					response.data
 				);
-				throw new Error(`Sync failed with status ${response.status}`);
+				throw new Error(`Sync failed: ${response.message ?? 'unknown error'}`);
 			}
 			console.log('✅ Синхронизация завершена');
 			return response;
@@ -162,6 +162,8 @@ export class SyncService {
 		entries: CBTEntry[],
 		lastSyncTimestamp?: string
 	): Promise<ApiResponse<SyncUserDataResponse>> {
+		// Записи приходят уже в каноническом camelCase-виде
+		// (см. mapTauriEntryToApi) — отправляем как есть, без переименований.
 		const operations = entries.map(e => ({
 			operationType: 'INSERT' as const,
 			tableName: 'cbt_entries',
@@ -176,16 +178,16 @@ export class SyncService {
 				entryDate: e.createdAt,
 				thoughts:
 					e.thoughts?.map(t => ({
-						id: (t as any).id,
+						id: t.id,
 						thought: t.thought,
-						isAutomatic: (t as any).isAutomatic,
+						isAutomatic: t.isAutomatic ?? false,
 						intensity: t.intensity,
 						emotions:
-							t.emotions?.map((em: any) => ({
-								emotionId: em.emotionId ?? em.emotion_id,
+							t.emotions?.map(em => ({
+								emotionId: em.emotionId,
 								intensity: em.intensity,
 							})) ?? [],
-						cognitiveDistortions: (t as any).cognitiveDistortions ?? [],
+						cognitiveDistortions: t.cognitiveDistortions ?? [],
 					})) ?? [],
 			},
 			createdAt: e.createdAt,
@@ -254,7 +256,9 @@ export class SyncService {
 				// Выполняем синхронизацию
 				const result = await this.quickSync(entries, lastSyncTimestamp);
 				if (!result.success) {
-					throw new Error(`AutoSync failed with status ${result.status}`);
+					throw new Error(
+						`AutoSync failed: ${result.message ?? 'unknown error'}`
+					);
 				}
 
 				console.log('✅ Автосинхронизация успешна');

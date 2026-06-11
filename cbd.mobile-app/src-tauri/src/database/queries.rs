@@ -5,135 +5,17 @@ use crate::database::models::*;
 
 // === ЗАПОЛНЕНИЕ НАЧАЛЬНЫХ ДАННЫХ ===
 
-pub async fn seed_emotion_categories(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    log::info!("🎭 Заполняем категории эмоций...");
-    
-    let now = Utc::now().to_rfc3339();
-    let categories = [
-        ("emotion_category.anger", "Гнев", "#FF6B6B", "😠", 1),
-        ("emotion_category.shame", "Стыд", "#F59E0B", "😳", 2),
-        ("emotion_category.sadness", "Грусть", "#60A5FA", "😢", 3),
-        ("emotion_category.fear", "Страх", "#A78BFA", "😰", 4),
-        ("emotion_category.joy", "Радость", "#FCD34D", "😊", 5),
-    ];
-
-    for (name_key, _name, color, icon, sort_order) in categories {
-        sqlx::query(
-            r#"
-            INSERT OR IGNORE INTO emotion_categories 
-            (name_key, color, icon, sort_order, is_active, created_at) 
-            VALUES (?, ?, ?, ?, TRUE, ?)
-            "#
-        )
-        .bind(name_key)
-        .bind(color)
-        .bind(icon)
-        .bind(sort_order)
-        .bind(&now)
-        .execute(pool)
-        .await?;
-    }
-
-    log::info!("✅ Категории эмоций заполнены!");
-    Ok(())
-}
-
-pub async fn seed_emotions(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    log::info!("😊 Заполняем эмоции...");
-    let now = Utc::now().to_rfc3339();
-
-    let anger = [
-        "Холодность","Злость","Бешенство","Сарказм","Раздражение","Ярость","Унижение","Обида","Ненависть",
-        "Нетерпение","Отвращение","Надменность","Злорадство","Недовольство","Цинизм","Протест","Неистовость",
-        "Враждебность","Равнодушие","Безучастность","Неприязнь","Пренебрежение","Зависть","Мстительность","Высокомерие"
-    ];
-    let shame = [
-        "Вина","Раскаяние","Унижение","Нечестность","Угрызение совести","Стеснение","Неловкость","Похоть",
-        "Ущербность","Растерянность","Обман","Потеря лица","Смущение","Позор","Сожаление","Расщепление",
-        "Озабоченность","Брошенность","Замкнутость","Угрюмость","Угнетённость","Пассивность","Отвержение"
-    ];
-    let sadness = [
-        "Огорчение","Горе","Боль","Угнетённость","Отвращение","Одиночество","Отчуждение","Разочарование",
-        "Поражение","Жалость к себе","Унижение","Тоска","Подавленность","Предательство","Скука","Печаль",
-        "Апатия","Равнодушие","Примирение","Раздражение","Обида","Скорбь","Отвержение","Отчаяние","Ущемлённость"
-    ];
-    let fear = [
-        "Волнение","Испуг","Паника","Беспокойство","Неуверенность","Боязливость","Подозрительность","Трусость",
-        "Нерешительность","Настороженность","Смятение","Тревога","Ужас","Опасение","Робость","Застенчивость",
-        "Безнадёжность","Сдержанность","Скрытность","Скованность","Замешательство","Ошарашенность","Озадаченность"
-    ];
-    let joy = [
-        "Благодарность","Доверие","Воодушевление","Озарение","Сопричастность","Умиротворение","Радушие","Единство",
-        "Торжественность","Наслаждение","Общность","Восторг","Благодать","Поддержка","Веселье","Надежда","Уверенность",
-        "Лёгкость","Любовь","Удовлетворение","Облегчение","Обожание","Преклонение","Подъём духа","Энтузиазм"
-    ];
-
-    let mut insert_list = Vec::new();
-    let mut order = 1;
-    for ru in anger { insert_list.push((1, format!("emotion.anger.{}", ru.replace(' ', "_")), "😠", order)); order+=1; }
-    order = 1; for ru in shame { insert_list.push((2, format!("emotion.shame.{}", ru.replace(' ', "_")), "😳", order)); order+=1; }
-    order = 1; for ru in sadness { insert_list.push((3, format!("emotion.sadness.{}", ru.replace(' ', "_")), "😢", order)); order+=1; }
-    order = 1; for ru in fear { insert_list.push((4, format!("emotion.fear.{}", ru.replace(' ', "_")), "😰", order)); order+=1; }
-    order = 1; for ru in joy { insert_list.push((5, format!("emotion.joy.{}", ru.replace(' ', "_")), "😊", order)); order+=1; }
-
-    for (cat_id, key, emoji, sort_order) in insert_list {
-        sqlx::query(
-            r#"INSERT OR IGNORE INTO emotions (category_id, name_key, emoji, intensity_default, synonyms, sort_order, is_active, created_at)
-               VALUES (?, ?, ?, 5, '[]', ?, TRUE, ?)"#
-        )
-        .bind(cat_id)
-        .bind(key)
-        .bind(emoji)
-        .bind(sort_order)
-        .bind(&now)
-        .execute(pool)
-        .await?;
-    }
-
-    log::info!("✅ Эмоции заполнены (5 категорий)");
-    Ok(())
-}
+// Каталог эмоций и категорий локально не сидится: источник истины — сервер,
+// синк выполняет команда sync_emotions_from_server (lib.rs) с серверными id.
 
 pub async fn seed_translations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     log::info!("🌍 Заполняем переводы...");
     
     let now = Utc::now().to_rfc3339();
     
+    // Переводы каталога эмоций здесь не сидятся: имена эмоций переводит
+    // словарь vue-i18n на фронте (ключи совпадают с серверными name_key).
     let translations = [
-        // Русский (базовый)
-        ("ru", "emotion_category.anger", "Гнев"),
-        ("ru", "emotion_category.fear", "Страх"),
-        ("ru", "emotion_category.sadness", "Грусть"),
-        ("ru", "emotion_category.joy", "Радость"),
-        ("ru", "emotion_category.love", "Любовь"),
-        
-        // Английский
-        ("en", "emotion_category.anger", "Anger"),
-        ("en", "emotion_category.fear", "Fear"),
-        ("en", "emotion_category.sadness", "Sadness"),
-        ("en", "emotion_category.joy", "Joy"),
-        ("en", "emotion_category.love", "Love"),
-        
-        // Испанский
-        ("es", "emotion_category.anger", "Ira"),
-        ("es", "emotion_category.fear", "Miedo"),
-        ("es", "emotion_category.sadness", "Tristeza"),
-        ("es", "emotion_category.joy", "Alegría"),
-        ("es", "emotion_category.love", "Amor"),
-        
-        // Переводы некоторых эмоций
-        ("ru", "emotion.anger.rage", "Ярость"),
-        ("en", "emotion.anger.rage", "Rage"),
-        ("es", "emotion.anger.rage", "Rabia"),
-        
-        ("ru", "emotion.fear.anxiety", "Тревога"),
-        ("en", "emotion.fear.anxiety", "Anxiety"),
-        ("es", "emotion.fear.anxiety", "Ansiedad"),
-        
-        ("ru", "emotion.joy.happiness", "Счастье"),
-        ("en", "emotion.joy.happiness", "Happiness"),
-        ("es", "emotion.joy.happiness", "Felicidad"),
-        
         // Интерфейс
         ("ru", "ui.add_entry", "Добавить запись"),
         ("en", "ui.add_entry", "Add Entry"),

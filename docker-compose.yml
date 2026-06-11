@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
@@ -12,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password}
       POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-trust}
     ports:
-      - '5432:5432'
+      - '${POSTGRES_HOST_PORT:-5432}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./cbd.web-api/docker/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -30,7 +28,7 @@ services:
     container_name: cbd-redis-dev
     restart: unless-stopped
     ports:
-      - '6379:6379'
+      - '${REDIS_HOST_PORT:-6379}:6379'
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
@@ -68,9 +66,8 @@ services:
     volumes:
       - ./cbd.web-api:/app
       - /app/node_modules
-      - /app/dist
     ports:
-      - '3002:3002'
+      - '${API_DEV_HOST_PORT:-3002}:3002'
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,7 +75,7 @@ services:
         condition: service_healthy
     networks:
       - cbd-network
-    command: npm run start:dev
+    command: sh -lc "npx prisma db push --skip-generate && npm run start:dev"
 
   # Prisma Studio (Database Admin)
   prisma-studio:
@@ -93,7 +90,7 @@ services:
       - ./cbd.web-api:/app
       - /app/node_modules
     ports:
-      - '5555:5555'
+      - '${PRISMA_STUDIO_HOST_PORT:-5555}:5555'
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,13 +104,13 @@ services:
     container_name: cbd-adminer-dev
     restart: unless-stopped
     ports:
-      - '8080:8080'
+      - '${ADMINER_HOST_PORT:-8080}:8080'
     depends_on:
       - postgres
     networks:
       - cbd-network
 
-  # Production API (for testing production builds)
+  # Production API (публикуется через Traefik на ${API_DOMAIN})
   api-prod:
     build:
       context: ./cbd.web-api
@@ -121,23 +118,36 @@ services:
     container_name: cbd-api-prod
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://postgres:dev_password@postgres:5432/cbd_diary_dev?schema=public
-      CORS_ORIGIN: http://localhost:5173
+      # Все секреты приходят из окружения (.env на сервере, который деплой
+      # собирает из GitHub Secrets) — дефолты только для локальной отладки
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-dev_password}@postgres:5432/${POSTGRES_DB:-cbd_diary_dev}?schema=public
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       NODE_ENV: production
-      PORT: 3003
+      PORT: 3002
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      POSTGRES_DB: cbd_diary_dev
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: dev_password
+      POSTGRES_DB: ${POSTGRES_DB:-cbd_diary_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev_access_secret_key_123}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev_refresh_secret_key_456}
       JWT_ACCESS_EXPIRE: 15m
       JWT_REFRESH_EXPIRE: 7d
       APP_API_PREFIX: api
       APP_API_VERSION: v1
-    ports:
-      - '3003:3003'
+      # AI (Gemini): ключ приходит из окружения хоста/CI, в образ не запекается.
+      # В dev-контейнере не задаём: api-dev читает cbd.web-api/.env через dotenv.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+    expose:
+      - '3002'
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.cbd-api.rule=Host(`${API_DOMAIN:-api.cbd-diary.ru}`)
+      - traefik.http.routers.cbd-api.entrypoints=websecure
+      - traefik.http.routers.cbd-api.tls.certresolver=le
+      - traefik.http.services.cbd-api.loadbalancer.server.port=3002
     depends_on:
       postgres:
         condition: service_healthy
@@ -145,6 +155,7 @@ services:
         condition: service_healthy
     networks:
       - cbd-network
+      - proxy
     profiles:
       - production
 
@@ -155,3 +166,7 @@ volumes:
 networks:
   cbd-network:
     driver: bridge
+  # Внешняя сеть Traefik (создаётся стеком ~/projects/traefik на сервере).
+  # Локально не нужна: её требует только api-prod (profile production).
+  proxy:
+    external: true

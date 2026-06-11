@@ -92,7 +92,7 @@ export async function exampleCreateCBTEntry() {
 					cognitiveDistortions: [
 						{
 							type: 'catastrophizing',
-							description: 'Преувеличение негативных последствий',
+							note: 'Преувеличение негативных последствий',
 						},
 					],
 				},
@@ -201,7 +201,7 @@ export async function exampleSyncFlow() {
 			console.log('Синхронизация успешна:', syncResult.data);
 
 			// Сохранить новую метку времени
-			syncService.setLastSyncTimestamp(syncResult.data.lastSyncTimestamp);
+			syncService.setLastSyncTimestamp(syncResult.data.newSyncTimestamp);
 
 			// Проверить конфликты
 			const conflicts = await syncService.getPendingConflicts();

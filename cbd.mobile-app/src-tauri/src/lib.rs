@@ -8,7 +8,7 @@ mod database;
 mod utils;
 
 // Экспорты
-use database::{Database, get_database_path};
+use database::Database;
 use utils::errors::{AppError, AppResult};
 
 // Для логирования
@@ -44,25 +44,6 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn new() -> AppResult<Self> {
-        log::info!("🔧 Инициализируем состояние приложения...");
-        
-        // Получаем правильный путь к БД для платформы
-        let db_path = get_database_path()
-            .map_err(|e| AppError::Config(format!("Не удалось получить путь к БД: {}", e)))?;
-        
-        log::info!("📍 Путь к БД: {}", db_path);
-        
-        // Инициализируем базу данных
-        let database = Database::new(&db_path).await
-            .map_err(|e| AppError::DatabaseConnection(format!("Не удалось подключиться к БД: {}", e)))?;
-        
-        Ok(Self {
-            database: Arc::new(database),
-            current_user: Arc::new(Mutex::new(None)),
-        })
-    }
-    
     pub async fn new_with_path(db_path: &str) -> AppResult<Self> {
         log::info!("🔧 Инициализируем состояние приложения...");
         
@@ -527,153 +508,241 @@ struct UpsertEmotionPayload {
     server_updated_at: Option<String>,
 }
 
+#[derive(serde::Deserialize)]
+struct UpsertCategoryPayload {
+    id: i32,
+    name_key: String,
+    color: Option<String>,
+    icon: Option<String>,
+    sort_order: Option<i32>,
+    is_active: Option<bool>,
+}
+
+// Подменяет emotion_id/emotionId внутри JSON thoughts по карте старый->новый.
+// Возвращает Some(JSON) только если что-то реально поменялось.
+fn remap_emotion_ids_in_thoughts(
+    thoughts_json: &str,
+    map: &std::collections::HashMap<i64, i64>,
+) -> Option<String> {
+    let mut value: serde_json::Value = serde_json::from_str(thoughts_json).ok()?;
+    let mut changed = false;
+    if let Some(thoughts) = value.as_array_mut() {
+        for t in thoughts.iter_mut() {
+            let Some(emotions) = t.get_mut("emotions").and_then(|e| e.as_array_mut()) else {
+                continue;
+            };
+            for em in emotions.iter_mut() {
+                let Some(obj) = em.as_object_mut() else { continue };
+                for key in ["emotion_id", "emotionId"] {
+                    let Some(old_id) = obj.get(key).and_then(|v| v.as_i64()) else {
+                        continue;
+                    };
+                    if let Some(new_id) = map.get(&old_id) {
+                        if *new_id != old_id {
+                            obj.insert(key.to_string(), serde_json::Value::from(*new_id));
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if changed {
+        serde_json::to_string(&value).ok()
+    } else {
+        None
+    }
+}
+
+// Каталог эмоций локально не сидится: сервер — источник истины.
+// Каталог пересобирается с СЕРВЕРНЫМИ id (категории и эмоции), а ссылки
+// на старые локальные id в существующих записях ремапятся по name_key.
 #[tauri::command]
 async fn sync_emotions_from_server(
     emotions: Vec<UpsertEmotionPayload>,
+    categories: Vec<UpsertCategoryPayload>,
     state: tauri::State<'_, AppState>,
 ) -> Result<usize, String> {
     let pool = state.database.get_pool();
 
-    // Подготовим кэш name_key -> category_id для быстрого резолва
-    let mut cat_by_key: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
-    {
-        let rows: Vec<(i32, String)> = sqlx::query_as(
-            "SELECT id, name_key FROM emotion_categories"
-        )
-        .fetch_all(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-        for (id, key) in rows { cat_by_key.insert(key, id); }
-    }
-
-    async fn resolve_category_id(
-        pool: &sqlx::SqlitePool,
-        cat_by_key: &mut std::collections::HashMap<String, i32>,
-        key: &str,
-    ) -> Result<i32, String> {
-        if let Some(cid) = cat_by_key.get(key) { return Ok(*cid); }
-        let cid_opt: Option<i32> = sqlx::query_scalar(
-            "SELECT id FROM emotion_categories WHERE name_key = ?"
-        )
-        .bind(key)
-        .fetch_optional(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-        if let Some(cid) = cid_opt {
-            cat_by_key.insert(key.to_string(), cid);
-            return Ok(cid);
-        }
-        let now = chrono::Utc::now().to_rfc3339();
-        sqlx::query(
-            "INSERT INTO emotion_categories (name_key, color, icon, sort_order, is_active, created_at) VALUES (?, '#999999', NULL, 0, TRUE, ?)"
-        )
-        .bind(key)
-        .bind(&now)
-        .execute(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-        let cid: i32 = sqlx::query_scalar(
-            "SELECT id FROM emotion_categories WHERE name_key = ?"
-        )
-        .bind(key)
-        .fetch_one(&*pool)
-        .await
-        .map_err(|e| e.to_string())?;
-        cat_by_key.insert(key.to_string(), cid);
-        Ok(cid)
+    // Пустой каталог от сервера — скорее всего сбой: не затираем рабочие данные
+    if emotions.is_empty() || categories.is_empty() {
+        log::warn!("⚠️ Синк эмоций пропущен: пустой каталог от сервера");
+        return Ok(0);
     }
 
     let now = chrono::Utc::now().to_rfc3339();
-    let mut upserted = 0usize;
-    let mut provided_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    for e in emotions {
-        let key_for_cat = e.category_external_key.clone().ok_or_else(|| "Missing category key".to_string())?;
-        let category_id = resolve_category_id(pool, &mut cat_by_key, &key_for_cat).await?;
-
-        let synonyms_json = serde_json::to_string(&(e.synonyms.unwrap_or_default()))
-            .map_err(|err| err.to_string())?;
-
-        sqlx::query(
-            r#"
-            INSERT INTO emotions (category_id, name_key, emoji, intensity_default, synonyms, opposite_emotion_id, sort_order, is_active, created_at, server_updated_at)
-            VALUES (?, ?, COALESCE(?, '😐'), COALESCE(?, 5), ?, ?, COALESCE(?, 0), COALESCE(?, TRUE), ?, COALESCE(?, ?))
-            ON CONFLICT(name_key) DO UPDATE SET
-                category_id = excluded.category_id,
-                emoji = excluded.emoji,
-                intensity_default = excluded.intensity_default,
-                synonyms = excluded.synonyms,
-                opposite_emotion_id = excluded.opposite_emotion_id,
-                sort_order = excluded.sort_order,
-                is_active = excluded.is_active,
-                server_updated_at = excluded.server_updated_at
-            "#
-        )
-        .bind(category_id)
-        .bind(&e.name_key)
-        .bind(e.emoji.unwrap_or("😐".to_string()))
-        .bind(e.intensity_default.unwrap_or(5))
-        .bind(synonyms_json)
-        .bind(e.opposite_emotion_id)
-        .bind(e.sort_order.unwrap_or(0))
-        .bind(e.is_active.unwrap_or(true))
-        .bind(&now)
-        .bind(e.server_updated_at.clone().unwrap_or(now.clone()))
-        .bind(&now)
-        .execute(&*pool)
+    // 1. Текущее соответствие локальный id -> name_key (до замены каталога)
+    let old_rows: Vec<(i64, String)> = sqlx::query_as("SELECT id, name_key FROM emotions")
+        .fetch_all(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
 
-        upserted += 1;
-        provided_keys.insert(e.name_key);
+    // 2. Снимаем FK-ссылки статистики на старые id (восстановим после ремапа)
+    let stats_refs: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT user_id, most_common_emotion_id FROM user_stats WHERE most_common_emotion_id IS NOT NULL",
+    )
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    sqlx::query("UPDATE user_stats SET most_common_emotion_id = NULL")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 3. Полная замена каталога: сначала дети (emotions), потом родители
+    sqlx::query("DELETE FROM emotions")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    sqlx::query("DELETE FROM emotion_categories")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    for c in &categories {
+        sqlx::query(
+            r#"INSERT INTO emotion_categories (id, name_key, color, icon, sort_order, is_active, created_at)
+               VALUES (?, ?, COALESCE(?, '#999999'), ?, COALESCE(?, 0), COALESCE(?, TRUE), ?)"#,
+        )
+        .bind(c.id)
+        .bind(&c.name_key)
+        .bind(c.color.as_deref())
+        .bind(c.icon.as_deref())
+        .bind(c.sort_order)
+        .bind(c.is_active)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| err.to_string())?;
     }
 
-    if provided_keys.is_empty() {
-        sqlx::query("UPDATE emotions SET opposite_emotion_id = NULL WHERE opposite_emotion_id IS NOT NULL")
-            .execute(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        sqlx::query("UPDATE user_stats SET most_common_emotion_id = NULL WHERE most_common_emotion_id IS NOT NULL")
-            .execute(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-        sqlx::query("DELETE FROM emotions")
-            .execute(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
-    } else {
-        let placeholders = std::iter::repeat("?")
-            .take(provided_keys.len())
-            .collect::<Vec<_>>()
-            .join(",");
-        let sql_nullify_opposite = format!(
-            "UPDATE emotions SET opposite_emotion_id = NULL WHERE opposite_emotion_id IN (SELECT id FROM emotions WHERE name_key NOT IN ({}))",
-            placeholders
-        );
-        let sql_nullify_userstats = format!(
-            "UPDATE user_stats SET most_common_emotion_id = NULL WHERE most_common_emotion_id IN (SELECT id FROM emotions WHERE name_key NOT IN ({}))",
-            placeholders
-        );
-        let mut q1 = sqlx::query(&sql_nullify_opposite);
-        for key in provided_keys.iter() { q1 = q1.bind(key); }
-        q1.execute(&*pool).await.map_err(|e| e.to_string())?;
+    let cat_id_by_key: std::collections::HashMap<&str, i32> = categories
+        .iter()
+        .map(|c| (c.name_key.as_str(), c.id))
+        .collect();
 
-        let mut q2 = sqlx::query(&sql_nullify_userstats);
-        for key in provided_keys.iter() { q2 = q2.bind(key); }
-        q2.execute(&*pool).await.map_err(|e| e.to_string())?;
-
-        let sql_delete = format!(
-            "DELETE FROM emotions WHERE name_key NOT IN ({})",
-            placeholders
-        );
-        let mut q3 = sqlx::query(&sql_delete);
-        for key in provided_keys.iter() { q3 = q3.bind(key); }
-        q3.execute(&*pool)
-            .await
-            .map_err(|e| e.to_string())?;
+    // Эмоции вставляем с NULL opposite (self-FK), связи проставляем вторым проходом
+    let mut inserted = 0usize;
+    for e in &emotions {
+        let Some(server_id) = e.id else {
+            log::warn!("⚠️ Эмоция {} без серверного id — пропущена", e.name_key);
+            continue;
+        };
+        let category_id = e.category_id.or_else(|| {
+            e.category_external_key
+                .as_deref()
+                .and_then(|k| cat_id_by_key.get(k).copied())
+        });
+        let Some(category_id) = category_id else {
+            log::warn!("⚠️ Эмоция {} без категории — пропущена", e.name_key);
+            continue;
+        };
+        let synonyms_json = serde_json::to_string(&e.synonyms.clone().unwrap_or_default())
+            .map_err(|err| err.to_string())?;
+        sqlx::query(
+            r#"INSERT INTO emotions (id, category_id, name_key, emoji, intensity_default, synonyms, opposite_emotion_id, sort_order, is_active, created_at, server_updated_at)
+               VALUES (?, ?, ?, COALESCE(?, '😐'), COALESCE(?, 5), ?, NULL, COALESCE(?, 0), COALESCE(?, TRUE), ?, ?)"#,
+        )
+        .bind(server_id)
+        .bind(category_id)
+        .bind(&e.name_key)
+        .bind(e.emoji.as_deref())
+        .bind(e.intensity_default)
+        .bind(synonyms_json)
+        .bind(e.sort_order)
+        .bind(e.is_active)
+        .bind(&now)
+        .bind(e.server_updated_at.as_deref().unwrap_or(&now))
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| err.to_string())?;
+        inserted += 1;
     }
 
-    Ok(upserted)
+    for e in &emotions {
+        if let (Some(server_id), Some(opposite)) = (e.id, e.opposite_emotion_id) {
+            // opposite приходит в серверном id-пространстве — каталог уже в нём же
+            sqlx::query(
+                "UPDATE emotions SET opposite_emotion_id = ? WHERE id = ? AND EXISTS (SELECT 1 FROM emotions WHERE id = ?)",
+            )
+            .bind(opposite)
+            .bind(server_id)
+            .bind(opposite)
+            .execute(&mut *tx)
+            .await
+            .map_err(|err| err.to_string())?;
+        }
+    }
+
+    // 4. Ремап ссылок в существующих записях: старый локальный id -> серверный (по name_key)
+    let new_id_by_key: std::collections::HashMap<&str, i64> = emotions
+        .iter()
+        .filter_map(|e| e.id.map(|id| (e.name_key.as_str(), id as i64)))
+        .collect();
+    let mut remap: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+    let mut unmatched = 0usize;
+    for (old_id, key) in &old_rows {
+        match new_id_by_key.get(key.as_str()) {
+            Some(new_id) => {
+                remap.insert(*old_id, *new_id);
+            }
+            None => unmatched += 1,
+        }
+    }
+    if unmatched > 0 {
+        log::warn!(
+            "⚠️ {} локальных эмоций не нашли пары на сервере (легаси-ключи?) — их ссылки не ремапятся",
+            unmatched
+        );
+    }
+
+    if remap.iter().any(|(old, new)| old != new) {
+        let entries: Vec<(String, String)> = sqlx::query_as("SELECT id, thoughts FROM cbt_entries")
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut remapped_entries = 0usize;
+        for (entry_id, thoughts_json) in entries {
+            if let Some(updated) = remap_emotion_ids_in_thoughts(&thoughts_json, &remap) {
+                sqlx::query("UPDATE cbt_entries SET thoughts = ? WHERE id = ?")
+                    .bind(updated)
+                    .bind(&entry_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|err| err.to_string())?;
+                remapped_entries += 1;
+            }
+        }
+        if remapped_entries > 0 {
+            log::info!("🔁 Ремап emotion_id выполнен в {} записях", remapped_entries);
+        }
+    }
+
+    // 5. Восстанавливаем статистику в новом id-пространстве (только то, что замапилось)
+    for (user_id, old_ref) in stats_refs {
+        if let Some(new_ref) = remap.get(&old_ref) {
+            sqlx::query(
+                "UPDATE user_stats SET most_common_emotion_id = ? WHERE user_id = ? AND EXISTS (SELECT 1 FROM emotions WHERE id = ?)",
+            )
+            .bind(new_ref)
+            .bind(&user_id)
+            .bind(new_ref)
+            .execute(&mut *tx)
+            .await
+            .map_err(|err| err.to_string())?;
+        }
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+    log::info!(
+        "✅ Каталог эмоций синхронизирован: {} категорий, {} эмоций",
+        categories.len(),
+        inserted
+    );
+    Ok(inserted)
 }
 
 #[tauri::command]
@@ -857,9 +926,15 @@ fn get_database_path_for_app(app: &tauri::App) -> AppResult<String> {
     
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        // Desktop - используем локальную директорию
-        let _ = app; // Заглушаем предупреждение о неиспользуемой переменной
-        Ok("sqlite:cbd_diary.db".to_string())
+        let mut path = app.path().app_data_dir()
+            .map_err(|e| AppError::Config(format!("Не удалось получить директорию данных приложения: {}", e)))?;
+
+        std::fs::create_dir_all(&path)
+            .map_err(|e| AppError::FileSystem(format!("Не удалось создать директорию: {}", e)))?;
+
+        path.push("cbd_diary.db");
+
+        Ok(format!("sqlite:{}", path.to_string_lossy()))
     }
 }
 

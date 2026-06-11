@@ -1,3 +1,4 @@
+import { isTauriRuntime } from './api/config';
 import type { HttpRequestOptions, HttpResponse } from './types';
 
 // Динамический импорт Tauri fetch только когда доступен
@@ -6,7 +7,7 @@ let tauriFetch: typeof fetch | null = null;
 // Проверяем доступность Tauri и импортируем fetch
 const initializeTauriFetch = async () => {
 	try {
-		if ((window as any).__TAURI__) {
+		if (isTauriRuntime()) {
 			const tauriHttp = await import('@tauri-apps/plugin-http');
 			tauriFetch = tauriHttp.fetch;
 			console.log('🌐 Используем Tauri fetch для мобильного приложения');
@@ -432,7 +433,7 @@ export class HttpService {
 	// Проверка соединения с сервером
 	async checkConnection(): Promise<boolean> {
 		try {
-			const response = await this.get('/api/v1/health', { timeout: 5000 });
+			const response = await this.get('/api/v1/sync/health', { timeout: 5000 });
 			return response.status === 200;
 		} catch {
 			return false;

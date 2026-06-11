@@ -360,10 +360,12 @@ export class ChatService {
       // Добавляем строгую инструкцию JSON-схемы последним system-сообщением
       messages.unshift({ role: 'system', content: schema });
 
+      // Финализация — структурный JSON: даём небольшой бюджет размышлений
+      // и запас по токенам, чтобы схема не обрезалась
       const text = await this.aiConnection.generateText(messages, {
-        model: process.env.OPEN_ROUTER_MODEL,
         temperature: 0.4,
-        maxTokens: 700,
+        maxTokens: 2048,
+        thinkingBudget: 256,
       });
       try {
         const parsed = JSON.parse(text || '{}');
@@ -399,7 +401,9 @@ export class ChatService {
       this.prisma.chatMessage.findMany({
         where: { chatId },
         orderBy: { createdAt: 'asc' },
-        take: 50,
+        // последние 50 сообщений (take: 50 брал ПЕРВЫЕ 50 — после
+        // пятидесятого сообщения модель переставала видеть новые реплики)
+        take: -50,
       }),
     ]);
 
@@ -413,8 +417,9 @@ export class ChatService {
       ...this.mapHistoryToModelMessages(history),
     ];
 
+    // Живой диалог: thinking выключен (дефолт сервиса) — короткие реплики,
+    // минимальная задержка
     const full = await this.aiConnection.generateTextStream(messages, onDelta, {
-      model: process.env.OPEN_ROUTER_MODEL,
       temperature: 0.7,
       maxTokens: 700,
     });

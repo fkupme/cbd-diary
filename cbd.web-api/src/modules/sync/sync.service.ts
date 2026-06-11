@@ -3,7 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { OperationType } from '@prisma/client';
+import { OperationType, Prisma } from '@prisma/client';
+import { normalizeThoughts } from '../../common/helpers/thoughts.helper';
 import { PrismaService } from '../../database/prisma.service';
 import { CbtService } from '../cbt/cbt.service';
 import {
@@ -333,7 +334,9 @@ export class SyncService {
     const normalizeEntrySnapshot = (snap: any) => {
       // Приводим снапшот к полям Prisma-модели CbtEntry
       const entryDate = snap?.entryDate ? new Date(snap.entryDate) : new Date();
-      const thoughtsJson = Array.isArray(snap?.thoughts) ? snap.thoughts : [];
+      const thoughtsJson = normalizeThoughts(
+        snap?.thoughts,
+      ) as unknown as Prisma.JsonArray;
       const tagsJson = Array.isArray(snap?.tags)
         ? snap.tags
         : typeof snap?.tags === 'string'

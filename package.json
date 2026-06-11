@@ -4,20 +4,22 @@
   "description": "CBD Diary - Cognitive Behavioral Therapy mood tracking application",
   "scripts": {
     "start": "npm run start:dev",
-    "start:dev": "concurrently \"npm run backend:dev\" \"npm run mobile:dev\"",
+    "start:dev": "npm run mobile:android",
     "start:prod": "docker-compose up -d",
     "stop": "docker-compose down",
+    "start:containers": "POSTGRES_HOST_PORT=${POSTGRES_HOST_PORT:-5433} docker compose --env-file .env.development up -d postgres redis api-dev",
     
-    "backend:dev": "cd cbd.web-api && npm run start:dev",
+    "backend:dev": "npm run start:containers",
     "backend:build": "cd cbd.web-api && npm run build",
     "backend:test": "cd cbd.web-api && npm run test",
     "backend:migrate": "cd cbd.web-api && npm run db:migrate",
     "backend:seed": "cd cbd.web-api && npm run db:seed",
     "backend:studio": "cd cbd.web-api && npm run db:studio",
     
-    "mobile:dev": "cd cbd.mobile-app && npm run tauri:dev",
+    "mobile:dev": "npm run mobile:android",
+    "mobile:desktop": "cd cbd.mobile-app && npm run tauri:dev",
     "mobile:build": "cd cbd.mobile-app && npm run tauri:build",
-    "mobile:android": "cd cbd.mobile-app && npm run android:dev",
+    "mobile:android": "cd cbd.mobile-app && npm start",
     "mobile:ios": "cd cbd.mobile-app && npm run ios:dev",
     
     "install:all": "npm install && cd cbd.web-api && npm install && cd ../cbd.mobile-app && npm install",

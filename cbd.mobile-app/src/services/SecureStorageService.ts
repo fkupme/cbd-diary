@@ -20,6 +20,7 @@ export class SecureStorageService {
 			// Создаем зашифрованное хранилище
 			this.store = await Store.load('cbd_secure_storage.json', {
 				autoSave: false,
+				defaults: {},
 			});
 
 			this.isInitialized = true;

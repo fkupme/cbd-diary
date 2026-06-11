@@ -195,9 +195,6 @@ const tabs = [
 	{ label: t("analytics.year", "Год"), value: "year" },
 ];
 const activeTab = ref<string>("month");
-function setTab(val: string) {
-	activeTab.value = val;
-}
 
 const summary = ref<any>(null);
 const diversityWeek = ref<any>(null);
@@ -221,6 +218,61 @@ const emotionsFromSummary = computed(() => {
 
 const diversity = computed(() => summary.value?.categoryDiversity ?? null);
 const timelinePoints = computed(() => summary.value?.entriesTimeline ?? []);
+
+// Простые инсайты из сводки бэка
+const insights = computed(() => {
+	const list: Array<{
+		id: string;
+		icon: string;
+		title: string;
+		text: string;
+	}> = [];
+	const s = summary.value;
+	if (!s) return list;
+
+	const improvement = s.moodTrends?.overallTrend?.improvement;
+	if (typeof improvement === "number" && improvement > 0) {
+		list.push({
+			id: "mood-improvement",
+			icon: "📈",
+			title: t("analytics.insightMoodTitle", "Записи помогают"),
+			text: t(
+				"analytics.insightMoodText",
+				`После работы с записью настроение в среднем выше на ${improvement.toFixed(
+					1
+				)} балла`
+			),
+		});
+	}
+
+	const consistency = s.progressReport?.keyMetrics?.consistency;
+	if (typeof consistency === "number" && consistency >= 50) {
+		list.push({
+			id: "consistency",
+			icon: "🔥",
+			title: t("analytics.insightConsistencyTitle", "Хорошая регулярность"),
+			text: t(
+				"analytics.insightConsistencyText",
+				"Вы стабильно ведёте дневник — это усиливает эффект КПТ"
+			),
+		});
+	}
+
+	const awareness = s.progressReport?.keyMetrics?.emotionalAwareness;
+	if (typeof awareness === "number" && awareness >= 40) {
+		list.push({
+			id: "awareness",
+			icon: "🎯",
+			title: t("analytics.insightAwarenessTitle", "Растёт осознанность"),
+			text: t(
+				"analytics.insightAwarenessText",
+				"Вы различаете всё больше оттенков эмоций в своих записях"
+			),
+		});
+	}
+
+	return list;
+});
 
 // Chart.js: Line for activity
 const lineCanvas = ref<HTMLCanvasElement | null>(null);

@@ -3,6 +3,10 @@
  * Экспорт всех API сервисов и клиентов
  */
 
+import { apiClient } from './client';
+import { authService } from './AuthService';
+import { syncService } from './SyncService';
+
 // API Client
 export { ApiClient, apiClient } from './client';
 

@@ -1,4 +1,12 @@
-import { Controller, Get, Put, Query, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Logger,
+  Put,
+  Query,
+  Req,
+  UnauthorizedException,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -26,24 +34,17 @@ import {
 @Controller('analytics')
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
+  private readonly logger = new Logger(AnalyticsController.name);
 
+  // Идентификатор берём только из верифицированного guard'ом req.user —
+  // никакого ручного декода токена и фолбэков на фиктивного пользователя.
   private extractUserId(req: Request): string {
     const user: any = (req as any).user;
-    if (user?.id) return user.id;
-    if (user?.sub) return user.sub;
-    const auth = (req.headers['authorization'] ||
-      req.headers['Authorization']) as string | undefined;
-    if (auth && auth.startsWith('Bearer ')) {
-      const token = auth.slice('Bearer '.length);
-      try {
-        const payloadPart = token.split('.')[1];
-        const json = Buffer.from(payloadPart, 'base64').toString('utf8');
-        const payload = JSON.parse(json);
-        if (payload?.sub) return payload.sub;
-        if (payload?.id) return payload.id;
-      } catch {}
+    const userId = user?.id ?? user?.sub;
+    if (!userId) {
+      throw new UnauthorizedException('Пользователь не аутентифицирован');
     }
-    return 'temp-user-id';
+    return userId;
   }
 
   @Get('user-stats')
@@ -170,6 +171,10 @@ export class AnalyticsController {
       );
       return createApiResponse(summary, req.url);
     } catch (e) {
+      this.logger.error(
+        `Не удалось собрать сводку аналитики для ${userId}: ${(e as Error)?.message}`,
+        (e as Error)?.stack,
+      );
       const empty: AnalyticsSummaryDto = {
         userStats: await this.analyticsService.getUserStats(userId),
         emotionAnalytics: [],
@@ -228,7 +233,8 @@ export class AnalyticsController {
           byDay: [],
         },
         generatedAt: new Date(),
-        dataQuality: { score: 0, issues: [], recommendations: [] },
+        // issues помечает клиенту, что это аварийный каркас, а не реальные данные
+        dataQuality: { score: 0, issues: ['summary_failed'], recommendations: [] },
       };
       return createApiResponse(empty, req.url);
     }
