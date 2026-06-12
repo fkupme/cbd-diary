@@ -32,10 +32,15 @@ export class PushSenderService {
     if (this.initTried) return null;
     this.initTried = true;
 
-    const raw = this.config.get<string>('FIREBASE_SERVICE_ACCOUNT');
+    // Принимаем service account как base64 (надёжно для CI/.env — одна строка,
+    // без переносов и кавычек) ИЛИ как сырой JSON (удобно для локального .env).
+    const b64 = this.config.get<string>('FIREBASE_SERVICE_ACCOUNT_B64');
+    const raw = b64
+      ? Buffer.from(b64, 'base64').toString('utf8')
+      : this.config.get<string>('FIREBASE_SERVICE_ACCOUNT');
     if (!raw) {
       this.logger.warn(
-        'FIREBASE_SERVICE_ACCOUNT не задан — remote push отключён',
+        'FIREBASE_SERVICE_ACCOUNT(_B64) не задан — remote push отключён',
       );
       return null;
     }

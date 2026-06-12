@@ -66,7 +66,9 @@ services:
       # Авто-финализация чата по неактивности (мс / минимум пар сообщений)
       CHAT_SUMMARY_TIMEOUT: ${CHAT_SUMMARY_TIMEOUT:-300000}
       CHAT_SUMMARY_CONDITION: ${CHAT_SUMMARY_CONDITION:-3}
-      # Web/remote push: service account (JSON одной строкой). Пусто — push выключен.
+      # Web/remote push: service account. _B64 (base64) надёжнее для .env;
+      # сырой JSON — для локального dotenv. Пусто — push выключен.
+      FIREBASE_SERVICE_ACCOUNT_B64: ${FIREBASE_SERVICE_ACCOUNT_B64:-}
       FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
     volumes:
       - ./cbd.web-api:/app
@@ -144,7 +146,9 @@ services:
       # В dev-контейнере не задаём: api-dev читает cbd.web-api/.env через dotenv.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
-      # Web/remote push: service account (JSON одной строкой). Пусто — push выключен.
+      # Web/remote push: service account. _B64 (base64) надёжнее для .env;
+      # сырой JSON — для локального dotenv. Пусто — push выключен.
+      FIREBASE_SERVICE_ACCOUNT_B64: ${FIREBASE_SERVICE_ACCOUNT_B64:-}
       FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
     expose:
       - '3002'

@@ -59,6 +59,11 @@ jobs:
             fi
             git pull origin main
 
+            # service account → base64 одной строкой: в .env НЕЛЬЗЯ многострочные
+            # значения (docker compose парсит файл построчно и падает на кавычках
+            # JSON). base64 безопасен независимо от того, как вставлен секрет.
+            FIREBASE_SA_B64=$(printf '%s' "${FIREBASE_SERVICE_ACCOUNT}" | base64 | tr -d '\n')
+
             # .env для docker compose собирается из GitHub Secrets —
             # единственный источник истины, на сервере руками не правится
             cat > .env <<EOF
@@ -72,7 +77,7 @@ jobs:
             CORS_ORIGIN=${CORS_ORIGIN:-https://cbd-diary.ru,https://www.cbd-diary.ru}
             API_DOMAIN=api.cbd-diary.ru
             WEB_DOMAIN=cbd-diary.ru
-            FIREBASE_SERVICE_ACCOUNT=${FIREBASE_SERVICE_ACCOUNT}
+            FIREBASE_SERVICE_ACCOUNT_B64=${FIREBASE_SA_B64}
             EOF
             chmod 600 .env
 
