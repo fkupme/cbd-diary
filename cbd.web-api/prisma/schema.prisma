@@ -289,8 +289,11 @@ model Chat {
 
   // Стадия КПТ-сессии: collect_context | find_belief | dispute | consolidate | safety
   stage      String   @default("collect_context") @db.VarChar(32)
-  // Артефакты стадий (контекст, убеждение, техника диспута, сбалансированная мысль...)
+  // Артефакты стадий (контекст, убеждение, техника диспута, план, директива...)
   stageData  Json     @default("{}") @map("stage_data")
+  // Версия стейта стадии: оптимистичная блокировка против гонки конкурентных
+  // супервизоров (см. ChatService.mutateStage). Любая мутация бампает её.
+  stageVersion Int    @default(0) @map("stage_version")
 
   // Финализация сессии
   finalized  Boolean  @default(false)

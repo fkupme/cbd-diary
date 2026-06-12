@@ -8,12 +8,15 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import { AiConnectionService } from '../ai-connection/ai-connection.service';
 import {
+  ALLOWED_ROLLBACKS,
   ChatStage,
+  SessionPlan,
+  SupervisorVerdict,
+  buildConductorPrompt,
   buildFinalizationSystemPrompt,
-  buildScaffold,
+  buildSessionPlanInstruction,
   buildSmerBlock,
-  buildStageInstruction,
-  buildTransitionInstruction,
+  buildSupervisorInstruction,
   nextStage,
 } from './chat-prompts';
 
@@ -170,31 +173,93 @@ export class ChatService {
     }
   }
 
-  // Системный промпт хода: общий каркас + СМЭР + инструкция ТЕКУЩЕЙ стадии
-  private buildStagePrompt(
-    user: any,
-    entry: any,
-    emotionLabels: Record<number, string>,
-    stage: ChatStage,
-  ): string {
-    return [
-      buildScaffold(user),
-      buildSmerBlock(entry, emotionLabels),
-      buildStageInstruction(stage),
-    ].join('\n\n');
+  /**
+   * Оптимистичная запись стейта стадии. Двигатель против гонки конкурентных
+   * супервизоров: пишем ТОЛЬКО если stageVersion не изменилась с момента чтения.
+   * Любая мутация бампает версию. Вернёт false, если версия уехала (degrade).
+   */
+  private async mutateStage(
+    chatId: string,
+    expectedVersion: number,
+    data: { stage?: ChatStage; stageData?: any },
+  ): Promise<boolean> {
+    const res = await this.prisma.chat.updateMany({
+      where: { id: chatId, stageVersion: expectedVersion, finalized: false },
+      data: { ...data, stageVersion: expectedVersion + 1 },
+    });
+    return res.count > 0;
+  }
+
+  /** Сколько ходов пользователя прошло на текущей стадии (для бюджета). */
+  private async countStageTurns(
+    chatId: string,
+    stageEnteredAt?: string | null,
+  ): Promise<number> {
+    const where: any = { chatId, role: 'USER' };
+    if (stageEnteredAt) where.createdAt = { gt: new Date(stageEnteredAt) };
+    return this.prisma.chatMessage.count({ where });
   }
 
   /**
-   * Transition-чекер: после хода ИИ дешёвым структурным вызовом решаем,
-   * завершена ли стадия, и двигаем Chat.stage. Вызывается fire-and-forget,
-   * чтобы не задерживать ai_done.
+   * Дешёвый СИНХРОННЫЙ safety-гейт по входящему сообщению пользователя.
+   * Гонять модель на каждом ходу дорого, поэтому сначала быстрый префильтр по
+   * кризисным маркерам, и только при совпадении — подтверждение моделью
+   * (чтобы отсеять фигуры речи «умираю со стыда»). Возвращает true, если
+   * стейт нужно синхронно перевести в safety ДО стрима ведущего.
    */
-  private async maybeAdvanceStage(
+  private async detectCrisis(userText: string): Promise<boolean> {
+    const text = (userText || '').toLowerCase();
+    if (!text.trim()) return false;
+    // Префильтр: грубые маркеры само-/чужого вреда. Лучше перехватить и
+    // подтвердить моделью, чем пропустить.
+    const markers =
+      /(суицид|убить себя|убью себя|покончить|не хочу жить|жить не хочу|свести счёты|свести счеты|причинить себе|порезать себя|режу себя|нанести вред|убить (его|её|ее|их)|расправ|самоубийств|вскрыть вены|спрыгнуть|таблетк.{0,12}(чтобы|разом)|сдохнуть)/i;
+    if (!markers.test(text)) return false;
+    try {
+      const out = await this.aiConnection.generateText(
+        [
+          {
+            role: 'system',
+            content:
+              'Ты — фильтр безопасности. Верни ИСКЛЮЧИТЕЛЬНО JSON {"crisis": boolean}. crisis = true, если в сообщении есть РЕАЛЬНЫЕ суицидальные мысли, намерение самоповреждения, желание причинить вред себе/другим или насилие над автором. Метафоры и фигуры речи («умираю со стыда», «убил бы за такое» в шутку) — crisis: false.',
+          },
+          { role: 'user', content: userText },
+        ],
+        { temperature: 0, maxTokens: 64, thinkingBudget: 0, responseJson: true },
+      );
+      const parsed = JSON.parse(out || '{}');
+      return parsed?.crisis === true;
+    } catch {
+      // Модель недоступна/мусор: при сработавшем префильтре безопаснее перейти
+      // в safety, чем продолжать разбор.
+      return true;
+    }
+  }
+
+  /**
+   * СУПЕРВИЗОР: дешёвый структурный вызов ПОСЛЕ хода ведущего (fire-and-forget).
+   * Решает stay/advance/rollback, может выдать директиву на следующий ход и
+   * обновить план. Запись — оптимистичная (mutateStage): если за время вызова
+   * стейт уехал (конкурентный супервизор / consume директивы), вердикт
+   * дропается. Невалидный JSON / упавшая модель — тоже degrade без изменений.
+   */
+  private async runSupervisor(
     chatId: string,
     currentStage: ChatStage,
     freshAiText: string,
   ): Promise<void> {
     try {
+      const chat = await this.prisma.chat.findUnique({ where: { id: chatId } });
+      if (!chat || chat.finalized) return;
+      const stageData: any = (chat.stageData as any) ?? {};
+      const version: number = (chat as any).stageVersion ?? 0;
+      const plan: SessionPlan | null = stageData.plan ?? null;
+      const stageArtifact = stageData[currentStage] ?? null;
+      const stageTurns = await this.countStageTurns(
+        chatId,
+        stageData.stageEnteredAt,
+      );
+
       const recent = await this.prisma.chatMessage.findMany({
         where: { chatId },
         orderBy: { createdAt: 'asc' },
@@ -209,77 +274,129 @@ export class ChatService {
       if (freshAiText.trim()) dialog.push(`Ассистент: ${freshAiText.trim()}`);
       if (!dialog.length) return;
 
-      const text = await this.aiConnection.generateText(
+      const raw = await this.aiConnection.generateText(
         [
-          { role: 'system', content: buildTransitionInstruction(currentStage) },
+          {
+            role: 'system',
+            content: buildSupervisorInstruction(
+              currentStage,
+              plan,
+              stageTurns,
+              stageArtifact,
+            ),
+          },
           { role: 'user', content: dialog.join('\n') },
         ],
         { temperature: 0, maxTokens: 512, thinkingBudget: 0, responseJson: true },
       );
 
-      let verdict: any = {};
+      let v: Partial<SupervisorVerdict> = {};
       try {
-        verdict = JSON.parse(text || '{}');
+        v = JSON.parse(raw || '{}');
       } catch {
-        return;
+        return; // degrade
       }
 
-      const chat = await this.prisma.chat.findUnique({ where: { id: chatId } });
-      if (!chat || chat.finalized) return;
-      const stageData: any = (chat.stageData as any) ?? {};
+      const directive =
+        typeof v.directive === 'string' && v.directive.trim()
+          ? v.directive.trim()
+          : null;
+      const planUpdate =
+        typeof v.planUpdate === 'string' && v.planUpdate.trim()
+          ? v.planUpdate.trim()
+          : null;
+      const nextPlan: SessionPlan | null =
+        plan && planUpdate
+          ? { ...plan, notes: [...(plan.notes ?? []), planUpdate].slice(-5) }
+          : plan;
 
-      // Кризисные маркеры — приоритетное прерывание в safety
-      if (verdict?.safetyConcern === true && currentStage !== 'safety') {
-        await this.prisma.chat.update({
-          where: { id: chatId },
-          data: {
-            stage: 'safety',
-            stageData: { ...stageData, resumeStage: currentStage },
+      // 1) Safety — приоритетное прерывание из любой стадии
+      if (v.safetyConcern === true && currentStage !== 'safety') {
+        const ok = await this.mutateStage(chatId, version, {
+          stage: 'safety',
+          stageData: {
+            ...stageData,
+            plan: nextPlan,
+            resumeStage: currentStage,
+            stageEnteredAt: new Date().toISOString(),
+            directive: null,
           },
         });
-        this.logger.warn(`chat ${chatId}: safetyConcern -> стадия safety`);
+        if (ok) this.logger.warn(`chat ${chatId}: safetyConcern -> safety`);
         return;
       }
 
-      if (verdict?.stageComplete !== true) return;
+      const verdict = v.verdict;
 
+      // 2) Выход из safety
       if (currentStage === 'safety') {
-        // Выход из safety — возвращаемся к прерванной стадии
+        if (verdict !== 'advance') return;
         const resume: ChatStage =
-          (stageData?.resumeStage as ChatStage) || 'collect_context';
-        await this.prisma.chat.update({
-          where: { id: chatId },
-          data: {
-            stage: resume,
-            stageData: { ...stageData, resumeStage: null },
+          (stageData.resumeStage as ChatStage) || 'collect_context';
+        await this.mutateStage(chatId, version, {
+          stage: resume,
+          stageData: {
+            ...stageData,
+            plan: nextPlan,
+            resumeStage: null,
+            stageEnteredAt: new Date().toISOString(),
+            directive: null,
           },
         });
         this.logger.log(`chat ${chatId}: safety -> ${resume}`);
         return;
       }
 
-      const next = nextStage(currentStage);
-      const artifacts =
-        verdict?.artifacts && typeof verdict.artifacts === 'object'
-          ? verdict.artifacts
-          : {};
-      await this.prisma.chat.update({
-        where: { id: chatId },
-        data: {
+      // 3) advance -> следующая стадия, артефакт под ключ текущей стадии
+      if (verdict === 'advance') {
+        const next = nextStage(currentStage);
+        const artifacts =
+          v.artifacts && typeof v.artifacts === 'object' ? v.artifacts : {};
+        await this.mutateStage(chatId, version, {
           stage: next ?? currentStage,
           stageData: {
             ...stageData,
+            plan: nextPlan,
             [currentStage]: artifacts,
+            stageEnteredAt: new Date().toISOString(),
+            directive: null,
             ...(next ? {} : { readyToFinalize: true }),
           },
-        },
-      });
-      this.logger.log(
-        `chat ${chatId}: стадия ${currentStage} завершена -> ${next ?? 'готов к финализации'}`,
-      );
+        });
+        this.logger.log(
+          `chat ${chatId}: ${currentStage} -> ${next ?? 'готов к финализации'}`,
+        );
+        return;
+      }
+
+      // 4) rollback — только в разрешённую стадию
+      if (verdict === 'rollback') {
+        const allowed = ALLOWED_ROLLBACKS[currentStage] ?? [];
+        const target = v.rollbackTo as ChatStage | undefined;
+        if (target && allowed.includes(target)) {
+          await this.mutateStage(chatId, version, {
+            stage: target,
+            stageData: {
+              ...stageData,
+              plan: nextPlan,
+              stageEnteredAt: new Date().toISOString(),
+              directive,
+            },
+          });
+          this.logger.log(`chat ${chatId}: rollback ${currentStage} -> ${target}`);
+        }
+        return;
+      }
+
+      // 5) stay — записываем только директиву/план, если они есть
+      if (directive || nextPlan !== plan) {
+        await this.mutateStage(chatId, version, {
+          stageData: { ...stageData, plan: nextPlan, directive },
+        });
+      }
     } catch (e: any) {
       this.logger.warn(
-        `maybeAdvanceStage failed for chat ${chatId}: ${e?.message || e}`,
+        `runSupervisor failed for chat ${chatId}: ${e?.message || e}`,
       );
     }
   }
@@ -405,14 +522,62 @@ export class ChatService {
     // ресетим таймер при старте генерации
     this.scheduleTimeout(chatId);
 
-    const stage: ChatStage = (chat.stage as ChatStage) || 'collect_context';
+    const stageData: any = (chat.stageData as any) ?? {};
+    const version: number = (chat as any).stageVersion ?? 0;
+    let stage: ChatStage = (chat.stage as ChatStage) || 'collect_context';
+    const plan: SessionPlan | null = stageData.plan ?? null;
+
+    // СИНХРОННЫЙ safety-гейт: проверяем ПОСЛЕДНЕЕ сообщение пользователя ДО
+    // стрима. Safety — единственное, ради чего мы платим латентностью перед
+    // ходом (и только при срабатывании грубого префильтра). Если кризис — сразу
+    // переводим стейт в safety и ведём этот же ход уже в режиме поддержки,
+    // не дожидаясь асинхронного супервизора.
+    if (stage !== 'safety') {
+      const lastUser = [...history]
+        .reverse()
+        .find((m) => m.role === 'USER')?.content;
+      if (lastUser && (await this.detectCrisis(String(lastUser)))) {
+        const ok = await this.mutateStage(chatId, version, {
+          stage: 'safety',
+          stageData: {
+            ...stageData,
+            resumeStage: stage,
+            stageEnteredAt: new Date().toISOString(),
+            directive: null,
+          },
+        });
+        if (ok) {
+          stage = 'safety';
+          this.logger.warn(`chat ${chatId}: sync safety-gate -> safety`);
+        }
+      }
+    }
+
+    // Директива потребляется ровно один раз: читаем для этого хода и гасим в
+    // стейте (идемпотентность — если супервизор следующего хода упадёт, старая
+    // директива не прилипнет на 2–3 хода). Гашение бампает версию, поэтому
+    // запоздавший супервизор прошлого хода с этой же директивой получит degrade.
+    const directive: string | null =
+      typeof stageData.directive === 'string' && stageData.directive.trim()
+        ? stageData.directive.trim()
+        : null;
+    // Гасим директиву в стейте (если не ушли в safety — там стейт уже мутирован
+    // выше). runSupervisor ниже перечитает версию сам, так что бамп безопасен.
+    if (directive && stage !== 'safety') {
+      await this.mutateStage(chatId, version, {
+        stageData: { ...stageData, directive: null },
+      });
+    }
+
     const emotionLabels = await this.buildEmotionLabels(entry);
-    const systemPrompt = this.buildStagePrompt(
+    const systemPrompt = buildConductorPrompt({
       user,
       entry,
       emotionLabels,
       stage,
-    );
+      plan,
+      directive: stage === 'safety' ? null : directive,
+    });
     const messages: ModelMessage[] = [
       { role: 'system', content: systemPrompt },
       ...this.mapHistoryToModelMessages(history),
@@ -428,8 +593,8 @@ export class ChatService {
     // по завершении тоже ресетим (есть активность)
     this.scheduleTimeout(chatId);
 
-    // Решение о смене стадии — отдельным дешёвым вызовом, не задерживая ответ
-    void this.maybeAdvanceStage(chatId, stage, full);
+    // Супервизор — отдельным дешёвым вызовом, не задерживая ответ
+    void this.runSupervisor(chatId, stage, full);
 
     return full;
   }
@@ -469,9 +634,97 @@ export class ChatService {
 
     this.scheduleTimeout(chat.id);
 
+    // План сессии генерим в фоне (fire-and-forget): первый ход стартует в
+    // collect_context одинаково при любом плане, поэтому не блокируем создание
+    // чата ещё одним LLM-вызовом. Когда план готов — он лежит в stageData.plan
+    // и подхватится со следующего хода.
+    void this.generateSessionPlan(userId, chat.id, entry);
+
     // Авто-генерацию ответа переносим на фронт (стрим),
     // чтобы избежать двойных стартовых сообщений
     return chat;
+  }
+
+  /**
+   * Генерация плана сессии: цель, мост с прошлой сессии (незакрытые next_steps),
+   * известные паттерны (повторяющиеся убеждения). Пишется в stageData.plan
+   * оптимистично, чтобы не затереть параллельный первый ход.
+   */
+  private async generateSessionPlan(
+    userId: string,
+    chatId: string,
+    entry: any,
+  ): Promise<void> {
+    try {
+      const [recurring, lastFin] = await Promise.all([
+        this.prisma.userBelief.findMany({
+          where: { userId, occurrencesCount: { gte: 2 }, status: 'active' },
+          orderBy: { occurrencesCount: 'desc' },
+          take: 5,
+          select: { text: true, occurrencesCount: true },
+        }),
+        this.prisma.chatFinalization.findFirst({
+          where: { chat: { userId } },
+          orderBy: { createdAt: 'desc' },
+          select: { summary: true },
+        }),
+      ]);
+
+      const lastNextSteps: string[] = Array.isArray(
+        (lastFin?.summary as any)?.next_steps,
+      )
+        ? ((lastFin!.summary as any).next_steps as any[])
+            .map((s) => String(s))
+            .filter(Boolean)
+            .slice(0, 5)
+        : [];
+
+      const smer = buildSmerBlock(entry, await this.buildEmotionLabels(entry));
+      const instruction = buildSessionPlanInstruction({
+        smerBlock: smer,
+        recurringBeliefs: recurring,
+        lastNextSteps,
+      });
+
+      const raw = await this.aiConnection.generateText(
+        [
+          { role: 'system', content: instruction },
+          { role: 'user', content: 'Составь план.' },
+        ],
+        { temperature: 0.3, maxTokens: 512, thinkingBudget: 0, responseJson: true },
+      );
+
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(raw || '{}');
+      } catch {
+        return;
+      }
+      const plan: SessionPlan = {
+        goal: typeof parsed?.goal === 'string' ? parsed.goal : 'Проверить ключевую мысль из записи',
+        bridge:
+          typeof parsed?.bridge === 'string' && parsed.bridge.trim()
+            ? parsed.bridge.trim()
+            : null,
+        knownPatterns: Array.isArray(parsed?.knownPatterns)
+          ? parsed.knownPatterns.map((p: any) => String(p)).filter(Boolean).slice(0, 3)
+          : [],
+        notes: [],
+      };
+
+      // Оптимистично: не затираем стейт, если первый ход уже что-то записал
+      const fresh = await this.prisma.chat.findUnique({ where: { id: chatId } });
+      if (!fresh || fresh.finalized) return;
+      const version: number = (fresh as any).stageVersion ?? 0;
+      const stageData: any = (fresh.stageData as any) ?? {};
+      await this.mutateStage(chatId, version, {
+        stageData: { ...stageData, plan },
+      });
+    } catch (e: any) {
+      this.logger.warn(
+        `generateSessionPlan failed for chat ${chatId}: ${e?.message || e}`,
+      );
+    }
   }
 
   async getChatByEntry(userId: string, cbtEntryId: string) {
