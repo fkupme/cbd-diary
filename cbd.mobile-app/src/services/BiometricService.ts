@@ -1,4 +1,10 @@
-import { invoke } from '@tauri-apps/api/core';
+import { isTauriRuntime } from '@cbd/platform';
+
+// Ленивый invoke: на web нативного API нет — биометрия отдаётся как недоступная.
+async function getInvoke() {
+	const { invoke } = await import('@tauri-apps/api/core');
+	return invoke;
+}
 
 export interface BiometricResult {
 	isAvailable: boolean;
@@ -28,8 +34,18 @@ export class BiometricService {
 	 * Проверяет доступность биометрической аутентификации
 	 */
 	async checkAvailability(): Promise<BiometricResult> {
+		// В браузере/PWA нативной биометрии нет — app-lock просто скрывается.
+		if (!isTauriRuntime()) {
+			return {
+				isAvailable: false,
+				biometryType: 'none',
+				deviceIsSecure: false,
+				reason: 'Биометрия недоступна в веб-версии',
+			};
+		}
 		try {
 			console.log('🔍 Проверяем доступность биометрии');
+			const invoke = await getInvoke();
 			const result = await invoke<BiometricResult>(
 				'check_biometric_availability'
 			);
@@ -61,6 +77,7 @@ export class BiometricService {
 				);
 			}
 
+			const invoke = await getInvoke();
 			const result = await invoke<boolean>('authenticate_biometric', {
 				reason: options.reason,
 			});
@@ -157,3 +174,6 @@ export class BiometricService {
 		return result.deviceIsSecure;
 	}
 }
+
+// Единый платформо-безопасный синглтон (web → биометрия недоступна)
+export const biometricService = BiometricService.getInstance();

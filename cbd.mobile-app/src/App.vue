@@ -12,6 +12,9 @@
 			@add-click="handleAddClick"
 			@update:model-value="activeTab = $event"
 		/>
+
+		<!-- PWA-онбординг (web): установка на устройство + пуши. На native неактивен. -->
+		<PwaOnboarding />
 	</q-layout>
 </template>
 
@@ -27,6 +30,7 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import type { Tab } from "./components/ui";
 import { CbdTabBar } from "./components/ui";
+import PwaOnboarding from "./components/PwaOnboarding.vue";
 import { useBiometricLock } from "./composables/useBiometricLock";
 import { ServiceManager } from "./services";
 

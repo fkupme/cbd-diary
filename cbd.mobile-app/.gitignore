@@ -10,7 +10,11 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-web
 *.local
+
+# .env.web коммитим намеренно: это ПУБЛИЧНЫЙ firebase web-config (уезжает в
+# браузер). Секрет — только FIREBASE_SERVICE_ACCOUNT на бэке.
 
 # Editor directories and files
 .vscode/*

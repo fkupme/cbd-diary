@@ -65,10 +65,16 @@
 </template>
 
 <script setup lang="ts">
-import { invoke } from "@tauri-apps/api/core";
+import { isTauriRuntime } from "@cbd/platform";
 import { copyToClipboard } from "quasar";
 import { onMounted, onUnmounted, ref } from "vue";
 import { useLocalization } from "../composables/useLocalization";
+
+// Ленивый invoke: тест Rust-команд имеет смысл только в нативной сборке.
+async function getInvoke() {
+	const { invoke } = await import("@tauri-apps/api/core");
+	return invoke;
+}
 
 interface LogEntry {
 	timestamp: string;
@@ -150,6 +156,15 @@ const testCommands = async () => {
 		String(t("logs.testingCommands", "🧪 Тестируем команды Rust..."))
 	);
 
+	// Rust-команды существуют только в нативной (Tauri) сборке.
+	if (!isTauriRuntime()) {
+		addLog(
+			"warn",
+			"Rust-команды доступны только в нативной сборке (Android/iOS/desktop)"
+		);
+		return;
+	}
+
 	const commands = [
 		"greet",
 		"get_emotions",
@@ -157,6 +172,7 @@ const testCommands = async () => {
 		"get_emotion_categories",
 	];
 
+	const invoke = await getInvoke();
 	for (const command of commands) {
 		try {
 			addLog(

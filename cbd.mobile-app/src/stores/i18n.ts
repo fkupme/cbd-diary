@@ -1,7 +1,13 @@
 import { emotionsService } from '@/services/api/EmotionsService';
-import { invoke } from '@tauri-apps/api/core';
+import { isTauriRuntime } from '@cbd/platform';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
+
+// Ленивый invoke — переводы кэшируются в локальной SQLite только на native.
+async function getInvoke() {
+	const { invoke } = await import('@tauri-apps/api/core');
+	return invoke;
+}
 
 // Типы данных, соответствующие Rust backend
 export interface Translation {
@@ -55,22 +61,10 @@ export const useI18nStore = defineStore('i18n', () => {
 		error.value = null;
 
 		// 1) Тянем пачки переводов с сервера (категории + эмоции) — best-effort.
-		//    Падение сети/сервера НЕ должно обнулять уже закэшированные переводы:
-		//    раньше исключение тут не давало дойти до шага 2, и на экране оставались
-		//    сырые ключи вроде `emotion.joy.blagodarnost`.
+		//    Падение сети/сервера НЕ должно обнулять уже закэшированные переводы.
+		let bundles: Record<string, Record<string, string>> = {};
 		try {
-			const bundles = await emotionsService.getEmotionI18nBundles();
-			const langs = Object.keys(bundles);
-			for (const lang of langs) {
-				const entries = Object.entries(bundles[lang]);
-				if (entries.length > 0) {
-					// Сохраняем в локальную БД (SQLite) через Tauri команду
-					await invoke<number>('upsert_translations_bulk', {
-						languageCode: lang,
-						translations: entries,
-					});
-				}
-			}
+			bundles = await emotionsService.getEmotionI18nBundles();
 		} catch (err: any) {
 			console.warn(
 				'i18n: не удалось обновить переводы с сервера, работаем на локальном кэше',
@@ -78,9 +72,36 @@ export const useI18nStore = defineStore('i18n', () => {
 			);
 		}
 
-		// 2) Всегда гидрируем кэш для текущего языка из локальной БД (даже если
-		//    шаг 1 упал — используем то, что уже синкнуто ранее).
+		// web (online-only): локальной SQLite нет — держим переводы текущего
+		// языка прямо в памяти из серверных бандлов.
+		if (!isTauriRuntime()) {
+			const map = bundles[languageCode];
+			if (map && Object.keys(map).length > 0) {
+				customTranslations.value = map;
+			}
+			isLoading.value = false;
+			return;
+		}
+
+		// 2a) native: апсертим пачки в локальную БД (SQLite) через Tauri команду
 		try {
+			const invoke = await getInvoke();
+			for (const lang of Object.keys(bundles)) {
+				const entries = Object.entries(bundles[lang]);
+				if (entries.length > 0) {
+					await invoke<number>('upsert_translations_bulk', {
+						languageCode: lang,
+						translations: entries,
+					});
+				}
+			}
+		} catch (err: any) {
+			console.warn('i18n: upsert переводов в локальную БД не удался', err);
+		}
+
+		// 2b) native: всегда гидрируем кэш текущего языка из локальной БД
+		try {
+			const invoke = await getInvoke();
 			const fromDb = await invoke<Array<[string, string]>>(
 				'get_translations_for_language',
 				{ languageCode }
@@ -106,7 +127,13 @@ export const useI18nStore = defineStore('i18n', () => {
 			return customTranslations.value[key];
 		}
 
+		// web: локальной БД нет — отдаём ключ как фолбэк (vue-i18n переведёт сам)
+		if (!isTauriRuntime()) {
+			return key;
+		}
+
 		try {
+			const invoke = await getInvoke();
 			const translation = await invoke<string | null>('get_translation', {
 				languageCode: currentLanguage.value,
 				translationKey: key,

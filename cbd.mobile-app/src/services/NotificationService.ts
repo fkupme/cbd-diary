@@ -1,14 +1,13 @@
-import {
-	createChannel,
-	Importance,
-	isPermissionGranted,
-	requestPermission,
-	sendNotification as tauriSendNotification,
-	Visibility,
-} from '@tauri-apps/plugin-notification';
+import { isTauriRuntime } from '@cbd/platform';
 import { HttpService } from './HttpService';
 import { socketService } from './SocketService';
 import { authService } from './api';
+
+// Нативный плагин уведомлений грузим лениво — только в Tauri-рантайме.
+// В браузере его нет, локальные уведомления показываем через web Notification API.
+async function getNotifPlugin() {
+	return import('@tauri-apps/plugin-notification');
+}
 
 interface NotificationAction {
 	id: string;
@@ -80,6 +79,16 @@ export class NotificationService {
 		try {
 			console.log('🔍 Checking notification permissions...');
 
+			// web/PWA: только ЧИТАЕМ текущее разрешение, не запрашиваем на старте —
+			// запрос делается позже в PWA-флоу (usePwaOnboarding).
+			if (!isTauriRuntime()) {
+				this.hasPermission =
+					typeof Notification !== 'undefined' &&
+					Notification.permission === 'granted';
+				return;
+			}
+
+			const { isPermissionGranted, requestPermission } = await getNotifPlugin();
 			this.hasPermission = await isPermissionGranted();
 			console.log(`📝 Current permission status: ${this.hasPermission}`);
 
@@ -98,8 +107,16 @@ export class NotificationService {
 	private async createChannels(): Promise<void> {
 		if (this.channelsCreated) return;
 
+		// Каналы — это Android/Tauri концепция; в браузере их нет.
+		if (!isTauriRuntime()) {
+			this.channelsCreated = true;
+			return;
+		}
+
 		try {
 			console.log('📋 Creating notification channels...');
+
+			const { createChannel, Importance, Visibility } = await getNotifPlugin();
 
 			// Канал для общих уведомлений - МАКСИМАЛЬНАЯ важность
 			await createChannel({
@@ -356,6 +373,11 @@ export class NotificationService {
 
 			console.log('📤 Sending instant notification:', data);
 
+			// web: разрешение могли выдать уже после init — перечитаем перед отправкой
+			if (!isTauriRuntime() && typeof Notification !== 'undefined') {
+				this.hasPermission = Notification.permission === 'granted';
+			}
+
 			if (!this.hasPermission) {
 				console.error('❌ Cannot send notification: Permission denied');
 				return false;
@@ -365,6 +387,18 @@ export class NotificationService {
 			const uniqueTag = `notification_${Date.now()}_${Math.random()
 				.toString(36)
 				.substr(2, 9)}`;
+
+			// web/PWA: foreground-уведомление через браузерный Notification API
+			if (!isTauriRuntime()) {
+				if (typeof Notification === 'undefined') return false;
+				new Notification(data.title, {
+					body: data.body,
+					icon: data.icon || '/icons/icon-192.png',
+					tag: data.tag || uniqueTag,
+				});
+				console.log('✅ Web notification shown');
+				return true;
+			}
 
 			const notificationPayload: any = {
 				title: data.title,
@@ -380,6 +414,7 @@ export class NotificationService {
 			};
 
 			console.log('🚀 Sending notification with payload:', notificationPayload);
+			const { sendNotification: tauriSendNotification } = await getNotifPlugin();
 			await tauriSendNotification(notificationPayload);
 
 			// Локальная обработка действия по клику не поддерживается системно везде.
@@ -466,6 +501,13 @@ export class NotificationService {
 
 	async getPermissionStatus(): Promise<boolean> {
 		try {
+			if (!isTauriRuntime()) {
+				this.hasPermission =
+					typeof Notification !== 'undefined' &&
+					Notification.permission === 'granted';
+				return this.hasPermission;
+			}
+			const { isPermissionGranted } = await getNotifPlugin();
 			this.hasPermission = await isPermissionGranted();
 			return this.hasPermission;
 		} catch (error) {
@@ -477,6 +519,13 @@ export class NotificationService {
 	async requestPermissions(): Promise<boolean> {
 		try {
 			console.log('🙏 Requesting notification permissions...');
+			if (!isTauriRuntime()) {
+				if (typeof Notification === 'undefined') return false;
+				const permission = await Notification.requestPermission();
+				this.hasPermission = permission === 'granted';
+				return this.hasPermission;
+			}
+			const { requestPermission } = await getNotifPlugin();
 			const permission = await requestPermission();
 			this.hasPermission = permission === 'granted';
 			console.log(`✅ Permission result: ${this.hasPermission}`);
@@ -541,3 +590,6 @@ export class NotificationService {
 		});
 	}
 }
+
+// Единый платформо-безопасный синглтон (web → браузерный Notification API)
+export const notificationService = NotificationService.getInstance();

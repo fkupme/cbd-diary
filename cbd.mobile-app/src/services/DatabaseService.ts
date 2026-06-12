@@ -1,3 +1,4 @@
+import { isTauriRuntime } from '@cbd/platform';
 import type {
 	Emotion as ApiEmotion,
 	EmotionCategory as ApiEmotionCategory,
@@ -8,6 +9,7 @@ import type {
 	CreateCBTEntryRequest,
 	UpdateCBTEntryRequest,
 } from './api/types';
+import { webDatabaseService, type IDatabase } from './web/WebDatabaseService';
 
 // Ленивая загрузка invoke из Tauri API (совместимо с web фолбэком)
 async function getInvoke<T = any>() {
@@ -414,4 +416,8 @@ export class DatabaseService {
 	}
 }
 
-export const databaseService = DatabaseService.getInstance();
+// Платформенная селекция: на native — локальная SQLite (Tauri), в браузере —
+// REST-адаптер (online-only). Путь импорта для стора/композаблов не меняется.
+export const databaseService: IDatabase = isTauriRuntime()
+	? DatabaseService.getInstance()
+	: webDatabaseService;

@@ -1,4 +1,5 @@
-import { Store } from '@tauri-apps/plugin-store';
+import { isTauriRuntime } from '@cbd/platform';
+import type { Store } from '@tauri-apps/plugin-store';
 import type { SecureStorageKey, SecureStorageValue } from './types';
 
 export class SecureStorageService {
@@ -21,7 +22,17 @@ export class SecureStorageService {
 		try {
 			if (this.isInitialized) return true;
 
-			// Создаем зашифрованное хранилище
+			// В браузере (web/PWA) Tauri Store недоступен — сразу на localStorage,
+			// не подгружая нативный плагин.
+			if (!isTauriRuntime()) {
+				this.webFallback = true;
+				this.isInitialized = true;
+				console.log('✅ SecureStorageService (web/localStorage)');
+				return true;
+			}
+
+			// Создаем зашифрованное хранилище (ленивый импорт нативного плагина)
+			const { Store } = await import('@tauri-apps/plugin-store');
 			this.store = await Store.load('cbd_secure_storage.json', {
 				autoSave: false,
 				defaults: {},
@@ -298,3 +309,6 @@ export class SecureStorageService {
 		}
 	}
 }
+
+// Единый платформо-безопасный синглтон (web → localStorage-фолбэк внутри класса)
+export const secureStorageService = SecureStorageService.getInstance();

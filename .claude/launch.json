@@ -8,6 +8,14 @@
 			"cwd": "cbd.mobile-app",
 			"port": 1420,
 			"autoPort": false
+		},
+		{
+			"name": "web",
+			"runtimeExecutable": "npm",
+			"runtimeArgs": ["run", "web:dev"],
+			"cwd": "cbd.mobile-app",
+			"port": 5174,
+			"autoPort": false
 		}
 	]
 }

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- CBD Diary — мастер-иконка «Дневник-кольцо» (full-bleed для генерации
+       Android/iOS/desktop/PWA-иконок). Знак в maskable safe-zone (~64%). -->
+  <rect width="1024" height="1024" fill="#12151d"/>
+  <circle cx="512" cy="512" r="330" fill="none" stroke="#f0b264" stroke-width="46"/>
+  <g fill="none" stroke="#ede6d6" stroke-width="32" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M512 372 Q432 348 332 392 L332 632 Q422 610 512 652 Z"/>
+    <path d="M512 372 Q592 348 692 392 L692 632 Q602 610 512 652 Z"/>
+  </g>
+  <line x1="512" y1="372" x2="512" y2="652" stroke="#f0b264" stroke-width="26" stroke-linecap="round"/>
+</svg>

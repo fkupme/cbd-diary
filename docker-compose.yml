@@ -66,6 +66,8 @@ services:
       # Авто-финализация чата по неактивности (мс / минимум пар сообщений)
       CHAT_SUMMARY_TIMEOUT: ${CHAT_SUMMARY_TIMEOUT:-300000}
       CHAT_SUMMARY_CONDITION: ${CHAT_SUMMARY_CONDITION:-3}
+      # Web/remote push: service account (JSON одной строкой). Пусто — push выключен.
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
     volumes:
       - ./cbd.web-api:/app
       - /app/node_modules
@@ -142,6 +144,8 @@ services:
       # В dev-контейнере не задаём: api-dev читает cbd.web-api/.env через dotenv.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      # Web/remote push: service account (JSON одной строкой). Пусто — push выключен.
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
     expose:
       - '3002'
     labels:
@@ -158,6 +162,31 @@ services:
         condition: service_healthy
     networks:
       - cbd-network
+      - proxy
+    profiles:
+      - production
+
+  # Production Web/PWA (публикуется через Traefik на ${WEB_DOMAIN} и www.${WEB_DOMAIN})
+  web-prod:
+    build:
+      # Контекст — корень репо: web-сборке нужен packages/platform (Vite-алиас)
+      context: .
+      dockerfile: cbd.mobile-app/Dockerfile.web
+      args:
+        # Адрес API инлайнится в бандл на этапе сборки
+        VITE_API_BASE_URL: https://${API_DOMAIN:-api.cbd-diary.ru}/api/v1
+    container_name: cbd-web-prod
+    restart: unless-stopped
+    expose:
+      - '80'
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.cbd-web.rule=Host(`${WEB_DOMAIN:-cbd-diary.ru}`) || Host(`www.${WEB_DOMAIN:-cbd-diary.ru}`)
+      - traefik.http.routers.cbd-web.entrypoints=websecure
+      - traefik.http.routers.cbd-web.tls.certresolver=le
+      - traefik.http.services.cbd-web.loadbalancer.server.port=80
+    networks:
       - proxy
     profiles:
       - production

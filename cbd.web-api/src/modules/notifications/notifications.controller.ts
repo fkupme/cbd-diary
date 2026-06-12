@@ -12,6 +12,7 @@ import {
   IsArray,
   IsBoolean,
   IsHexColor,
+  IsIn,
   IsISO8601,
   IsNumber,
   IsOptional,
@@ -133,9 +134,13 @@ class RegisterPushTokenDto {
   @IsString()
   userId?: string | null;
 
-  @ApiPropertyOptional({ description: 'Платформа', example: 'ANDROID' })
-  @IsString()
-  platform!: 'ANDROID' | 'IOS';
+  @ApiPropertyOptional({
+    description: 'Платформа',
+    example: 'ANDROID',
+    enum: ['ANDROID', 'IOS', 'WEB'],
+  })
+  @IsIn(['ANDROID', 'IOS', 'WEB'])
+  platform!: 'ANDROID' | 'IOS' | 'WEB';
 
   @ApiPropertyOptional({
     description: 'Токен устройства',
@@ -151,6 +156,32 @@ class RegisterPushTokenDto {
   @IsOptional()
   @IsString()
   deviceId?: string | null;
+}
+
+class TestPushDto {
+  @ApiPropertyOptional({
+    description: 'Кому отправить (userId). Если не задан — нужен token.',
+  })
+  @IsOptional()
+  @IsString()
+  userId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Конкретный токен устройства (приоритетнее userId).',
+  })
+  @IsOptional()
+  @IsString()
+  token?: string | null;
+
+  @ApiPropertyOptional({ description: 'Заголовок', example: 'Тест' })
+  @IsOptional()
+  @IsString()
+  title?: string | null;
+
+  @ApiPropertyOptional({ description: 'Текст', example: 'Проверка web push' })
+  @IsOptional()
+  @IsString()
+  body?: string | null;
 }
 
 @ApiTags('notifications')
@@ -221,5 +252,26 @@ export class NotificationsController {
       deviceId: dto.deviceId ?? null,
     });
     return { success: true, data: { id: rec.id } };
+  }
+
+  @Post('test-push')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Тестовая отправка push (по userId или конкретному токену)',
+  })
+  @ApiBody({ type: TestPushDto })
+  async testPush(@Body() dto: TestPushDto) {
+    const payload = {
+      title: dto.title ?? 'CBD Diary',
+      body: dto.body ?? 'Тестовое уведомление',
+      data: { kind: 'test' },
+    };
+    const result = dto.token
+      ? await this.pushSender.sendToTokens([dto.token], payload)
+      : await this.pushSender.sendPushToUsers(
+          dto.userId ? [dto.userId] : [],
+          payload,
+        );
+    return { success: result.success > 0, ...result };
   }
 }

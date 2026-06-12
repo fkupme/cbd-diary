@@ -1,11 +1,14 @@
-# Деплой бэка на VPS — по образцу olive_tatoo/.github/workflows/deploy.yml:
+# Деплой бэка + web на VPS — по образцу olive_tatoo/.github/workflows/deploy.yml:
 # push в main -> SSH на сервер -> git pull -> .env из GitHub Secrets ->
-# миграции -> сборка -> рестарт. API публикуется Traefik'ом на ${API_DOMAIN}.
+# миграции -> сборка -> рестарт. Traefik публикует: API на ${API_DOMAIN},
+# web/PWA на ${WEB_DOMAIN} (+ www). Web-сборке секреты не нужны: публичный
+# firebase-config лежит в cbd.mobile-app/.env.web, API base — в build-args.
 #
 # Секреты репозитория (Settings -> Secrets and variables -> Actions):
 #   доступ к серверу: VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_PORT, GH_PAT
 #   приложение (список — cbd.web-api/.env.example, помечены [secret]):
 #     GEMINI_API_KEY, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, POSTGRES_PASSWORD
+#     FIREBASE_SERVICE_ACCOUNT (JSON service account ОДНОЙ строкой — web/remote push)
 #   опционально: CORS_ORIGIN (дефолт https://cbd-diary.ru)
 #
 # Предусловия на сервере: репо склонирован в DEPLOY_DIR, стек Traefik
@@ -17,6 +20,8 @@ on:
     branches: [main]
     paths:
       - 'cbd.web-api/**'
+      - 'cbd.mobile-app/**'
+      - 'packages/**'
       - 'docker-compose.yml'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
@@ -37,12 +42,13 @@ jobs:
           JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          envs: GH_PAT,GEMINI_API_KEY,JWT_ACCESS_SECRET,JWT_REFRESH_SECRET,POSTGRES_PASSWORD,CORS_ORIGIN
+          envs: GH_PAT,GEMINI_API_KEY,JWT_ACCESS_SECRET,JWT_REFRESH_SECRET,POSTGRES_PASSWORD,CORS_ORIGIN,FIREBASE_SERVICE_ACCOUNT
           script: |
             set -e
             cd ${{ env.DEPLOY_DIR }}
@@ -63,8 +69,10 @@ jobs:
             JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
             GEMINI_API_KEY=${GEMINI_API_KEY}
             GEMINI_MODEL=gemini-2.5-flash
-            CORS_ORIGIN=${CORS_ORIGIN:-https://cbd-diary.ru}
+            CORS_ORIGIN=${CORS_ORIGIN:-https://cbd-diary.ru,https://www.cbd-diary.ru}
             API_DOMAIN=api.cbd-diary.ru
+            WEB_DOMAIN=cbd-diary.ru
+            FIREBASE_SERVICE_ACCOUNT=${FIREBASE_SERVICE_ACCOUNT}
             EOF
             chmod 600 .env
 
@@ -82,6 +90,11 @@ jobs:
             # Запускаем приложение
             docker compose --profile production up -d --remove-orphans api-prod
 
+            # Web/PWA: собираем и публикуем статику (Traefik отдаёт на WEB_DOMAIN).
+            # Секреты не нужны — публичный firebase-config в .env.web, API base в build-args.
+            docker compose --profile production build web-prod
+            docker compose --profile production up -d web-prod
+
             docker image prune -f
-            echo "=== CBD Diary API deployed ==="
+            echo "=== CBD Diary API + Web deployed ==="
             docker compose --profile production ps

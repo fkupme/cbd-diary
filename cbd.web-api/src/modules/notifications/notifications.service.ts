@@ -123,7 +123,7 @@ export class NotificationsService {
   async registerDeviceToken(params: {
     userId?: string | null;
     token: string;
-    platform: 'ANDROID' | 'IOS';
+    platform: 'ANDROID' | 'IOS' | 'WEB';
     deviceId?: string | null;
   }) {
     const { userId, token, platform, deviceId } = params;

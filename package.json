@@ -21,7 +21,11 @@
     "mobile:build": "cd cbd.mobile-app && npm run tauri:build",
     "mobile:android": "cd cbd.mobile-app && npm start",
     "mobile:ios": "cd cbd.mobile-app && npm run ios:dev",
-    
+
+    "web:dev": "cd cbd.mobile-app && npm run web:dev",
+    "web:build": "cd cbd.mobile-app && npm run web:build",
+    "web:preview": "cd cbd.mobile-app && npm run web:preview",
+
     "install:all": "npm install && cd cbd.web-api && npm install && cd ../cbd.mobile-app && npm install",
     "clean": "npm run clean:backend && npm run clean:mobile",
     "clean:backend": "cd cbd.web-api && rm -rf node_modules dist",
@@ -51,6 +55,7 @@
     "concurrently": "^8.2.2"
   },
   "workspaces": [
+    "packages/*",
     "cbd.web-api",
     "cbd.mobile-app"
   ],

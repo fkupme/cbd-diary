@@ -18,8 +18,14 @@ import {
 	type UserStats,
 } from '@/services/api';
 import { databaseService } from '@/services/DatabaseService';
-import { invoke } from '@tauri-apps/api/core';
+import { isTauriRuntime } from '@cbd/platform';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+
+// Ленивый invoke — только для нативной (Tauri) ветки локальной SQLite.
+async function getInvoke() {
+	const { invoke } = await import('@tauri-apps/api/core');
+	return invoke;
+}
 
 /**
  * Стянуть каталог эмоций с сервера и слить в локальную SQLite.
@@ -27,6 +33,10 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
  * без изменений в БД, если каталог не поменялся.
  */
 async function syncEmotionsCatalog(): Promise<number> {
+	// На web локальной SQLite нет — каталог читается напрямую с API
+	// (WebDatabaseService.getEmotions*), синкать некуда.
+	if (!isTauriRuntime()) return 0;
+
 	const full = await emotionsService.getFullEmotionsStructure();
 
 	const categoriesPayload = full.categories
@@ -58,6 +68,7 @@ async function syncEmotionsCatalog(): Promise<number> {
 			server_updated_at: new Date().toISOString(),
 		}));
 
+	const invoke = await getInvoke();
 	return invoke<number>('sync_emotions_from_server', {
 		emotions: emotionsPayload,
 		categories: categoriesPayload,
@@ -87,24 +98,28 @@ export function useAuth() {
 				// Загружаем полный профиль в фоне — не блокируем логин
 				loadCurrentUser().catch(console.warn);
 
-				// Локальная (SQLite) сессия: логиним того же пользователя по email в Tauri
-				try {
-					await invoke('login_or_create_user', {
-						email: result.data.user.email,
-						name:
-							(result.data.user as any).name ||
-							(result.data.user as any).username ||
-							null,
-						preferred_language:
-							(result.data.user as any).preferredLanguage ||
-							(result.data.user as any).preferred_language ||
-							'ru',
-					});
-				} catch (e) {
-					console.warn(
-						'⚠️ Не удалось залогинить локального пользователя в Tauri:',
-						e
-					);
+				// Локальная (SQLite) сессия: логиним того же пользователя по email в
+				// Tauri. На web локальной БД нет — шаг пропускается.
+				if (isTauriRuntime()) {
+					try {
+						const invoke = await getInvoke();
+						await invoke('login_or_create_user', {
+							email: result.data.user.email,
+							name:
+								(result.data.user as any).name ||
+								(result.data.user as any).username ||
+								null,
+							preferred_language:
+								(result.data.user as any).preferredLanguage ||
+								(result.data.user as any).preferred_language ||
+								'ru',
+						});
+					} catch (e) {
+						console.warn(
+							'⚠️ Не удалось залогинить локального пользователя в Tauri:',
+							e
+						);
+					}
 				}
 
 				// После авторизации: проверяем каталог эмоций в фоне — не блокируем
@@ -559,6 +574,9 @@ export function useSync() {
 
 	const performSync = async () => {
 		if (isSyncing.value) return;
+		// На web (online-only) запись уже идёт напрямую в API через REST-адаптер БД;
+		// отдельная синхронизация локальной SQLite не нужна.
+		if (!isTauriRuntime()) return;
 
 		isSyncing.value = true;
 
@@ -620,7 +638,7 @@ export function useSync() {
 							entryDate: snap.entryDate,
 						} as any;
 						try {
-							await databaseService.upsertCBTEntryFromServer(
+							await databaseService.upsertCBTEntryFromServer?.(
 								serverId,
 								createPayload
 							);
@@ -665,7 +683,7 @@ export function useSync() {
 								: [];
 						}
 						try {
-							await databaseService.updateCBTEntryByServerId(
+							await databaseService.updateCBTEntryByServerId?.(
 								serverId,
 								updatePayload
 							);
@@ -679,7 +697,7 @@ export function useSync() {
 
 					if (op.operationType === 'DELETE') {
 						try {
-							await databaseService.deleteCBTEntryByServerId(serverId);
+							await databaseService.deleteCBTEntryByServerId?.(serverId);
 						} catch (e) {
 							console.warn(
 								'⚠️ Не удалось применить DELETE serverOp локально:',
@@ -722,7 +740,7 @@ export function useSync() {
 										(e as any).created_at,
 								};
 								try {
-									await databaseService.upsertCBTEntryFromServer(e.id, payload);
+									await databaseService.upsertCBTEntryFromServer?.(e.id, payload);
 								} catch {}
 							}
 						}

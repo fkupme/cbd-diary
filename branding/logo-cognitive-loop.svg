@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 100 100">
+  <!-- CBD Diary — запасной знак «Когнитивная петля» (КПТ-треугольник как
+       замкнутый цикл; прозрачный фон). -->
+  <path d="M55.4 29.6 Q50 20 44.6 29.6 L30.4 54.4 Q25 64 36 64 L64 64 Q75 64 69.6 54.4 Z" fill="none" stroke="#f0b264" stroke-width="5.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="50" cy="20" r="4.2" fill="#ede6d6"/>
+  <circle cx="25" cy="64" r="4.2" fill="#ede6d6"/>
+  <circle cx="75" cy="64" r="4.2" fill="#ede6d6"/>
+  <circle cx="50" cy="49.5" r="3.1" fill="#f0b264"/>
+</svg>

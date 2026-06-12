@@ -1,11 +1,30 @@
+import {
+	isTauriRuntime,
+	registerServiceWorker,
+	setupInstallPromptCapture,
+} from '@cbd/platform';
 import { createPinia } from 'pinia';
 import { Dark, Quasar } from 'quasar';
 import { createApp } from 'vue';
 import App from './App.vue';
+import { hasFirebaseConfig, serviceWorkerUrlWithConfig } from './config/firebase';
 import i18n from './i18n';
 import router from './router';
 import { useI18nStore } from './stores/i18n';
 import './styles/main.scss';
+
+// PWA (web): перехватываем промпт установки и регистрируем service worker
+// как можно раньше — иначе beforeinstallprompt можно пропустить. На native — no-op.
+if (!isTauriRuntime()) {
+	setupInstallPromptCapture();
+	if ('serviceWorker' in navigator) {
+		void registerServiceWorker(
+			hasFirebaseConfig()
+				? serviceWorkerUrlWithConfig()
+				: '/firebase-messaging-sw.js'
+		);
+	}
+}
 
 // Import icon libraries
 import '@quasar/extras/material-icons-outlined/material-icons-outlined.css';

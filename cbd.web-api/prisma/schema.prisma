@@ -368,6 +368,7 @@ model UserBelief {
 enum PushPlatform {
   ANDROID
   IOS
+  WEB
 }
 
 model DevicePushToken {

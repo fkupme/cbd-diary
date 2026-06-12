@@ -1,0 +1,13 @@
+# Контекст для web-сборки (cbd.mobile-app/Dockerfile.web) — корень репо.
+# Держим его лёгким и не тащим хостовые артефакты в образ.
+**/node_modules
+**/dist
+**/dist-web
+**/dist-ssr
+.git
+**/.git
+**/src-tauri/target
+**/src-tauri/gen
+*.apk
+**/.DS_Store
+.DS_Store

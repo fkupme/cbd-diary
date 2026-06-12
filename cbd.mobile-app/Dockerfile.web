@@ -1,0 +1,29 @@
+# Web/PWA-сборка CBD Diary (Vite, mode=web) + раздача через nginx.
+# ВАЖНО: контекст сборки — КОРЕНЬ репо (нужен packages/platform, который
+# приложение тянет через Vite-алиас @cbd/platform). Сборка идёт в рамках
+# npm-workspace, чтобы firebase корректно резолвился из @cbd/platform.
+
+FROM node:20-alpine AS build
+WORKDIR /repo
+
+# Манифесты воркспейса — отдельным слоем для кэша npm ci
+COPY package.json package-lock.json ./
+COPY packages/platform/package.json packages/platform/
+COPY cbd.mobile-app/package.json cbd.mobile-app/
+COPY cbd.web-api/package.json cbd.web-api/
+RUN npm ci
+
+# Исходники, нужные для web-сборки
+COPY packages/platform packages/platform
+COPY cbd.mobile-app cbd.mobile-app
+
+# Адрес API в прод-сборку (Vite инлайнит на этапе билда)
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+RUN npm run web:build --workspace cbd.mobile-app
+
+# --- Раздача статики ---
+FROM nginx:alpine AS runner
+COPY cbd.mobile-app/nginx.web.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /repo/cbd.mobile-app/dist-web /usr/share/nginx/html
+EXPOSE 80

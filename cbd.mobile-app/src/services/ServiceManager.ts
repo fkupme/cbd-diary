@@ -1,10 +1,11 @@
+import { databaseService } from './DatabaseService';
 import {
 	BiometricService,
-	DatabaseService,
 	HttpService,
 	NotificationService,
 	SecureStorageService,
 } from './index';
+import type { IDatabase } from './web/WebDatabaseService';
 
 export class ServiceManager {
 	private static instance: ServiceManager;
@@ -13,14 +14,15 @@ export class ServiceManager {
 
 	// Сервисы
 	public notification: NotificationService;
-	public database: DatabaseService;
+	// БД выбирается по платформе (native SQLite / web REST) в DatabaseService.ts
+	public database: IDatabase;
 	public biometric: BiometricService;
 	public storage: SecureStorageService;
 	public http: HttpService;
 
 	private constructor() {
 		this.notification = NotificationService.getInstance();
-		this.database = DatabaseService.getInstance();
+		this.database = databaseService;
 		this.biometric = BiometricService.getInstance();
 		this.storage = SecureStorageService.getInstance();
 		this.http = HttpService.getInstance();
