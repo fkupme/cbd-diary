@@ -77,8 +77,27 @@ impl Database {
             }
         }
         
-        let pool = SqlitePool::connect(database_url).await?;
-        
+        // Конфигурируем подключение: WAL + busy_timeout, иначе при конкурентном
+        // доступе (логин параллельно дёргает синк эмоций, записей, профиля)
+        // запись падает с "database is locked" (SQLITE_BUSY) — каталог эмоций
+        // тогда не наполняется и эмоции пропадают в дневнике/колесе.
+        use sqlx::sqlite::{
+            SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous,
+        };
+        use std::str::FromStr;
+        use std::time::Duration;
+
+        let connect_options = SqliteConnectOptions::from_str(database_url)?
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Wal) // конкурентные читатели + 1 писатель
+            .busy_timeout(Duration::from_secs(5)) // ждать блокировку, а не падать
+            .synchronous(SqliteSynchronous::Normal);
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect_with(connect_options)
+            .await?;
+
         // Запускаем миграции
         migrations::run_migrations(&pool).await?;
         
