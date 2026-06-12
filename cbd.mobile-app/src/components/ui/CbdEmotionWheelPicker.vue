@@ -109,11 +109,13 @@
 											currentRotation.category
 										)
 									"
+									@click="onItemClick(index)"
 								>
 									<div
 										:class="[
 											'category-chip',
 											getCategoryChipColor(option.value),
+											{ shine: glowing && selectedCategoryIndex === index },
 										]"
 									>
 										{{ option.text }}
@@ -146,9 +148,15 @@
 											currentRotation.emotion
 										)
 									"
-									@click="quickPickEmotionId(option.value)"
+									@click="onItemClick(index)"
 								>
-									<div :class="['emotion-chip', getEmotionChipColor()]">
+									<div
+										:class="[
+											'emotion-chip',
+											getEmotionChipColor(),
+											{ shine: glowing && selectedEmotionIndex === index },
+										]"
+									>
 										{{ option.text }}
 									</div>
 								</div>
@@ -185,8 +193,14 @@
 											currentRotation.intensity
 										)
 									"
+									@click="onItemClick(index)"
 								>
-									<div class="intensity-chip">
+									<div
+										:class="[
+											'intensity-chip',
+											{ shine: glowing && selectedIntensityIndex === index },
+										]"
+									>
 										<div class="intensity-content">
 											<div class="intensity-dots">
 												<div
@@ -267,6 +281,11 @@ const isOpen = computed({
 
 // Touch/Mouse state
 const isDragging = ref(false);
+// двигали ли колесо в этом жесте: драг (двигали) только довдигает+сияние,
+// а тап/клик по подсвеченному — подтверждает и идёт дальше
+const dragMoved = ref(false);
+// одноразовая вспышка «сияния» на выбранном (центральном) элементе
+const glowing = ref(false);
 const startY = ref(0);
 const currentRotation = ref({
 	category: 0,
@@ -362,6 +381,7 @@ watch(
 // Touch/Mouse handlers
 const handleTouchStart = (event: TouchEvent) => {
 	isDragging.value = true;
+	dragMoved.value = false;
 	startY.value = event.touches[0].clientY;
 	lastDragY.value = event.touches[0].clientY;
 	lastDragTime.value = Date.now();
@@ -391,11 +411,14 @@ const handleTouchEnd = () => {
 	if (!isDragging.value) return;
 	isDragging.value = false;
 
-	finishWheelSelection();
+	// Только довдигаем к центру + сияние, если реально крутили. Тап (без движения)
+	// обработает клик по элементу (onItemClick) — он и подтверждает выбор.
+	if (dragMoved.value) finishWheelSelection();
 };
 
 const handleMouseDown = (event: MouseEvent) => {
 	isDragging.value = true;
+	dragMoved.value = false;
 	startY.value = event.clientY;
 	lastDragY.value = event.clientY;
 	lastDragTime.value = Date.now();
@@ -431,10 +454,12 @@ const handleMouseUp = () => {
 	document.removeEventListener("mousemove", handleMouseMove);
 	document.removeEventListener("mouseup", handleMouseUp);
 
-	finishWheelSelection();
+	if (dragMoved.value) finishWheelSelection();
 };
 
 const updateWheelRotation = (deltaY: number) => {
+	// Реальное движение колеса → это драг (а не тап). Микро-джиттер ≤1px не в счёт.
+	if (Math.abs(deltaY) > 1) dragMoved.value = true;
 	const rotationDelta = deltaY * 1.5; // Чувствительность
 
 	if (currentStep.value === 1) {
@@ -481,57 +506,94 @@ const syncSelectedToCenter = () => {
 	}
 };
 
+// Отпускание драга: довдигаем к центральному элементу + «сияние», БЕЗ перехода.
+// Дальше пользователь дополнительно кликает по подсвеченному — это подтверждает.
 const finishWheelSelection = () => {
+	const itemHeight = 80;
 	let options: any[] = [];
-	let currentRotationValue = 0;
+	let rotation = 0;
 
 	if (currentStep.value === 1) {
 		options = categoryOptions.value;
-		currentRotationValue = currentRotation.value.category;
+		rotation = currentRotation.value.category;
 	} else if (currentStep.value === 2) {
 		options = emotionOptions.value;
-		currentRotationValue = currentRotation.value.emotion;
-	} else if (currentStep.value === 3) {
+		rotation = currentRotation.value.emotion;
+	} else {
 		options = intensityOptions.value;
-		currentRotationValue = currentRotation.value.intensity;
+		rotation = currentRotation.value.intensity;
 	}
 
 	if (options.length === 0) return;
 
-	const itemHeight = 80;
-	let selectedIndex = Math.round(-currentRotationValue / itemHeight);
-	selectedIndex = Math.max(0, Math.min(selectedIndex, options.length - 1));
-	const normalizedIndex = selectedIndex;
-
-	const targetRotation = -normalizedIndex * itemHeight;
+	let idx = Math.round(-rotation / itemHeight);
+	idx = Math.max(0, Math.min(idx, options.length - 1));
+	const target = -idx * itemHeight;
 
 	if (currentStep.value === 1) {
-		currentRotation.value.category = targetRotation;
-		selectedCategoryIndex.value = normalizedIndex;
-		setTimeout(() => {
-			if (currentStep.value === 1) {
-				currentStep.value = 2;
-				const centerIndex = getCenterIndex(emotionOptions.value.length);
-				selectedEmotionIndex.value = centerIndex;
-				currentRotation.value.emotion = -centerIndex * itemHeight;
-			}
-		}, 250);
+		currentRotation.value.category = target;
+		selectedCategoryIndex.value = idx;
 	} else if (currentStep.value === 2) {
-		currentRotation.value.emotion = targetRotation;
-		selectedEmotionIndex.value = normalizedIndex;
+		currentRotation.value.emotion = target;
+		selectedEmotionIndex.value = idx;
+	} else {
+		currentRotation.value.intensity = target;
+		selectedIntensityIndex.value = idx;
+	}
+
+	triggerGlow();
+};
+
+// Одноразовая вспышка «сияния» на выбранном (центральном) элементе.
+const triggerGlow = () => {
+	glowing.value = false;
+	requestAnimationFrame(() => {
+		glowing.value = true;
 		setTimeout(() => {
-			if (currentStep.value === 2) {
-				currentStep.value = 3;
-				selectedIntensityIndex.value = 4; // Средняя интенсивность
-				currentRotation.value.intensity = -4 * itemHeight;
-			}
-		}, 200);
-	} else if (currentStep.value === 3) {
-		currentRotation.value.intensity = targetRotation;
-		selectedIntensityIndex.value = normalizedIndex;
+			glowing.value = false;
+		}, 650);
+	});
+};
+
+// Клик по элементу = подтверждение: снап к нему, сияние и переход дальше
+// (на шаге 3 — финальный confirm). Хвост драга (если был сдвиг) игнорируем.
+const onItemClick = (index: number) => {
+	if (dragMoved.value) {
+		dragMoved.value = false;
+		return;
+	}
+	selectIndexAndAdvance(index);
+};
+
+const selectIndexAndAdvance = (index: number) => {
+	const itemHeight = 80;
+
+	if (currentStep.value === 1) {
+		selectedCategoryIndex.value = index;
+		currentRotation.value.category = -index * itemHeight;
+		triggerGlow();
 		setTimeout(() => {
-			confirmSelection();
-		}, 150);
+			if (currentStep.value !== 1) return;
+			currentStep.value = 2;
+			const centerIndex = getCenterIndex(emotionOptions.value.length);
+			selectedEmotionIndex.value = centerIndex;
+			currentRotation.value.emotion = -centerIndex * itemHeight;
+		}, 240);
+	} else if (currentStep.value === 2) {
+		selectedEmotionIndex.value = index;
+		currentRotation.value.emotion = -index * itemHeight;
+		triggerGlow();
+		setTimeout(() => {
+			if (currentStep.value !== 2) return;
+			currentStep.value = 3;
+			selectedIntensityIndex.value = 4; // Средняя интенсивность
+			currentRotation.value.intensity = -4 * itemHeight;
+		}, 240);
+	} else {
+		selectedIntensityIndex.value = index;
+		currentRotation.value.intensity = -index * itemHeight;
+		triggerGlow();
+		setTimeout(() => confirmSelection(), 240);
 	}
 };
 
@@ -661,14 +723,6 @@ function quickPickEmotion(item: Emotion) {
 	// что выбор «не срабатывает».
 	searchQuery.value = "";
 	currentStep.value = 3;
-}
-
-// Быстрый переход на шаг 3 при клике по эмоции на шаге 2
-function quickPickEmotionId(emotionIdStr: string) {
-	const emotionId = parseInt(emotionIdStr);
-	const selected = props.emotions.find((e) => e.id === emotionId);
-	if (!selected) return;
-	quickPickEmotion(selected);
 }
 </script>
 
@@ -950,6 +1004,8 @@ function quickPickEmotionId(emotionIdStr: string) {
 .category-chip,
 .emotion-chip,
 .intensity-chip {
+	position: relative;
+	overflow: hidden;
 	width: 100%;
 	height: 100%;
 	display: flex;
@@ -962,6 +1018,62 @@ function quickPickEmotionId(emotionIdStr: string) {
 	border: 1px solid var(--line);
 	color: var(--paper-dim);
 	transition: color 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+}
+
+/* Одноразовая вспышка «сияния» на подсвеченном/подтверждённом элементе */
+@keyframes chipShine {
+	0% {
+		box-shadow: 0 0 0 0 rgba(240, 178, 100, 0);
+	}
+	35% {
+		box-shadow: 0 0 38px -4px rgba(240, 178, 100, 0.9);
+		border-color: rgba(240, 178, 100, 0.95);
+	}
+	100% {
+		box-shadow: 0 0 24px -10px rgba(240, 178, 100, 0.5);
+	}
+}
+@keyframes chipSweep {
+	from {
+		transform: translateX(-130%);
+	}
+	to {
+		transform: translateX(130%);
+	}
+}
+.category-chip.shine,
+.emotion-chip.shine,
+.intensity-chip.shine {
+	animation: chipShine 0.62s ease-out;
+}
+.category-chip.shine::after,
+.emotion-chip.shine::after,
+.intensity-chip.shine::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	background: linear-gradient(
+		115deg,
+		transparent 30%,
+		rgba(255, 236, 200, 0.42) 50%,
+		transparent 70%
+	);
+	transform: translateX(-130%);
+	animation: chipSweep 0.62s ease-out;
+	pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+	.category-chip.shine,
+	.emotion-chip.shine,
+	.intensity-chip.shine {
+		animation: none;
+	}
+	.category-chip.shine::after,
+	.emotion-chip.shine::after,
+	.intensity-chip.shine::after {
+		display: none;
+	}
 }
 
 /* Выбранный (по центру) — зажигается лампой */
