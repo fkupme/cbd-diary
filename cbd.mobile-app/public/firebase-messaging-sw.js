@@ -34,9 +34,13 @@ self.addEventListener('activate', event => {
 	event.waitUntil(self.clients.claim());
 });
 
-// Chromium-эвристики установки всё ещё ждут fetch-обработчик на SW приложения.
+// Chromium-эвристики установки ждут наличие fetch-обработчика на SW. Но в
+// кросс-ориджин (API на api.*) НЕ вмешиваемся и не-GET не трогаем — иначе
+// ломаем/зашумляем запросы приложения к бэкенду.
 self.addEventListener('fetch', event => {
 	if (event.request.method !== 'GET') return;
+	const url = new URL(event.request.url);
+	if (url.origin !== self.location.origin) return;
 	event.respondWith(fetch(event.request));
 });
 

@@ -64,6 +64,12 @@ jobs:
             # JSON). base64 безопасен независимо от того, как вставлен секрет.
             FIREBASE_SA_B64=$(printf '%s' "${FIREBASE_SERVICE_ACCOUNT}" | base64 | tr -d '\n')
 
+            # CORS: канонические origin'ы web (apex+www) гарантируем ВСЕГДА,
+            # а значение секрета CORS_ORIGIN (если задано) лишь добавляем —
+            # иначе устаревший секрет перебивал дефолт и резал прод по CORS.
+            CORS_ALL="https://cbd-diary.ru,https://www.cbd-diary.ru"
+            if [ -n "${CORS_ORIGIN}" ]; then CORS_ALL="${CORS_ALL},${CORS_ORIGIN}"; fi
+
             # .env для docker compose собирается из GitHub Secrets —
             # единственный источник истины, на сервере руками не правится
             cat > .env <<EOF
@@ -74,7 +80,7 @@ jobs:
             JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
             GEMINI_API_KEY=${GEMINI_API_KEY}
             GEMINI_MODEL=gemini-2.5-flash
-            CORS_ORIGIN=${CORS_ORIGIN:-https://cbd-diary.ru,https://www.cbd-diary.ru}
+            CORS_ORIGIN=${CORS_ALL}
             API_DOMAIN=api.cbd-diary.ru
             WEB_DOMAIN=cbd-diary.ru
             FIREBASE_SERVICE_ACCOUNT_B64=${FIREBASE_SA_B64}
