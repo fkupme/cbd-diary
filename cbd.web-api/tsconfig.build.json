@@ -1,4 +1,5 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "scripts", "scripts/**/*", "**/*spec.ts"]
+  "comment": "prisma/ исключён из сборки: иначе tsc поднимает rootDir до корня и emit уезжает в dist/src/main.js, тогда как Dockerfile CMD зовёт `node dist/main` → крах прода 'Cannot find module /app/dist/main'.",
+  "exclude": ["node_modules", "test", "dist", "scripts", "scripts/**/*", "prisma", "prisma/**/*", "**/*spec.ts"]
 }
