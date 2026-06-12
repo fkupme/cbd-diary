@@ -15,7 +15,7 @@ import { PaginationDto } from '../../../common/dto/pagination.dto';
 export class EmotionInputDto {
   @ApiProperty({ description: 'ID эмоции' })
   @IsInt({ message: 'ID эмоции должен быть числом' })
-  emotion_id: number;
+  emotionId: number;
 
   @ApiProperty({ description: 'Интенсивность эмоции', minimum: 1, maximum: 10 })
   @IsInt({ message: 'Интенсивность должна быть числом' })
@@ -42,7 +42,7 @@ export class ThoughtChainDto {
 
   @ApiProperty({ description: 'Является ли мысль автоматической' })
   @IsOptional()
-  is_automatic?: boolean = false;
+  isAutomatic?: boolean = false;
 
   @ApiProperty({ description: 'Интенсивность мысли', minimum: 1, maximum: 10 })
   @IsOptional()
@@ -68,7 +68,7 @@ export class ThoughtChainDto {
   @IsArray({ message: 'Когнитивные искажения должны быть массивом' })
   @ValidateNested({ each: true })
   @Type(() => CognitiveDistortionDto)
-  cognitive_distortions?: CognitiveDistortionDto[] = [];
+  cognitiveDistortions?: CognitiveDistortionDto[] = [];
 }
 
 export class CreateCbtEntryDto {
@@ -107,7 +107,7 @@ export class CreateCbtEntryDto {
   @IsInt({ message: 'Настроение должно быть числом' })
   @Min(1, { message: 'Настроение не может быть меньше 1' })
   @Max(10, { message: 'Настроение не может быть больше 10' })
-  mood_score_before?: number;
+  moodScoreBefore?: number;
 
   @ApiPropertyOptional({
     description: 'Настроение после записи',
@@ -118,13 +118,13 @@ export class CreateCbtEntryDto {
   @IsInt({ message: 'Настроение должно быть числом' })
   @Min(1, { message: 'Настроение не может быть меньше 1' })
   @Max(10, { message: 'Настроение не может быть больше 10' })
-  mood_score_after?: number;
+  moodScoreAfter?: number;
 
   @ApiPropertyOptional({ description: 'Длительность записи в минутах' })
   @IsOptional()
   @IsInt({ message: 'Длительность должна быть числом' })
   @Min(0, { message: 'Длительность не может быть отрицательной' })
-  entry_duration_minutes?: number;
+  entryDurationMinutes?: number;
 
   @ApiPropertyOptional({ description: 'Теги', type: [String] })
   @IsOptional()
@@ -172,7 +172,7 @@ export class UpdateCbtEntryDto {
   @IsInt({ message: 'Настроение должно быть числом' })
   @Min(1, { message: 'Настроение не может быть меньше 1' })
   @Max(10, { message: 'Настроение не может быть больше 10' })
-  mood_score_before?: number;
+  moodScoreBefore?: number;
 
   @ApiPropertyOptional({
     description: 'Настроение после записи',
@@ -183,13 +183,13 @@ export class UpdateCbtEntryDto {
   @IsInt({ message: 'Настроение должно быть числом' })
   @Min(1, { message: 'Настроение не может быть меньше 1' })
   @Max(10, { message: 'Настроение не может быть больше 10' })
-  mood_score_after?: number;
+  moodScoreAfter?: number;
 
   @ApiPropertyOptional({ description: 'Длительность записи в минутах' })
   @IsOptional()
   @IsInt({ message: 'Длительность должна быть числом' })
   @Min(0, { message: 'Длительность не может быть отрицательной' })
-  entry_duration_minutes?: number;
+  entryDurationMinutes?: number;
 
   @ApiPropertyOptional({ description: 'Теги', type: [String] })
   @IsOptional()

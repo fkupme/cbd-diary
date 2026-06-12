@@ -38,9 +38,9 @@ export class CbtService {
           situation: data.situation,
           thoughts: normalizeThoughts(data.thoughts) as unknown as Prisma.JsonArray,
           reactions: data.reactions,
-          moodScoreBefore: data.mood_score_before,
-          moodScoreAfter: data.mood_score_after,
-          entryDurationMinutes: data.entry_duration_minutes,
+          moodScoreBefore: data.moodScoreBefore,
+          moodScoreAfter: data.moodScoreAfter,
+          entryDurationMinutes: data.entryDurationMinutes,
           tags: data.tags || [],
         },
       });
@@ -221,14 +221,14 @@ export class CbtService {
       if (data.reactions) {
         updateData.reactions = data.reactions;
       }
-      if (data.mood_score_before !== undefined) {
-        updateData.moodScoreBefore = data.mood_score_before;
+      if (data.moodScoreBefore !== undefined) {
+        updateData.moodScoreBefore = data.moodScoreBefore;
       }
-      if (data.mood_score_after !== undefined) {
-        updateData.moodScoreAfter = data.mood_score_after;
+      if (data.moodScoreAfter !== undefined) {
+        updateData.moodScoreAfter = data.moodScoreAfter;
       }
-      if (data.entry_duration_minutes !== undefined) {
-        updateData.entryDurationMinutes = data.entry_duration_minutes;
+      if (data.entryDurationMinutes !== undefined) {
+        updateData.entryDurationMinutes = data.entryDurationMinutes;
       }
       if (data.tags) {
         updateData.tags = data.tags;
