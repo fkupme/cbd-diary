@@ -22,6 +22,49 @@ import { invoke } from '@tauri-apps/api/core';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 /**
+ * Стянуть каталог эмоций с сервера и слить в локальную SQLite.
+ * Синк на стороне Rust инкрементальный: upsert по серверным id,
+ * без изменений в БД, если каталог не поменялся.
+ */
+async function syncEmotionsCatalog(): Promise<number> {
+	const full = await emotionsService.getFullEmotionsStructure();
+
+	const categoriesPayload = full.categories
+		.filter(c => c.id && c.nameKey)
+		.map(c => ({
+			id: c.id,
+			name_key: c.nameKey,
+			color: c.color ?? null,
+			icon: c.icon ?? null,
+			sort_order: c.sortOrder ?? 0,
+			is_active: c.isActive ?? true,
+		}));
+
+	const emotionsPayload = full.emotions
+		.filter(e => e.id && e.nameKey)
+		.map(e => ({
+			id: e.id,
+			category_id: e.categoryId ?? null,
+			category_external_key: e.category?.nameKey ?? undefined,
+			name_key: e.nameKey,
+			emoji: e.emoji,
+			intensity_default: e.intensityDefault ?? 5,
+			synonyms: Array.isArray(e.synonyms)
+				? e.synonyms.filter(s => typeof s === 'string')
+				: [],
+			opposite_emotion_id: e.oppositeEmotionId ?? undefined,
+			sort_order: e.sortOrder ?? 0,
+			is_active: e.isActive ?? true,
+			server_updated_at: new Date().toISOString(),
+		}));
+
+	return invoke<number>('sync_emotions_from_server', {
+		emotions: emotionsPayload,
+		categories: categoriesPayload,
+	});
+}
+
+/**
  * Композабл для работы с аутентификацией
  */
 export function useAuth() {
@@ -64,47 +107,14 @@ export function useAuth() {
 					);
 				}
 
-				// После авторизации: синкаем каталог эмоций в фоне — не блокируем логин
+				// После авторизации: проверяем каталог эмоций в фоне — не блокируем
+				// логин. Rust-синк инкрементальный: если новых/изменённых нет — no-op.
 				if (navigator.onLine) {
 					Promise.resolve().then(async () => {
 						try {
-							console.log('🔁 Синк каталога эмоций после логина (фон)...');
-							const full = await emotionsService.getFullEmotionsStructure();
-
-							const categoriesPayload = full.categories
-								.filter(c => c.id && c.nameKey)
-								.map(c => ({
-									id: c.id,
-									name_key: c.nameKey,
-									color: c.color ?? null,
-									icon: c.icon ?? null,
-									sort_order: c.sortOrder ?? 0,
-									is_active: c.isActive ?? true,
-								}));
-
-							const emotionsPayload = full.emotions
-								.filter(e => e.id && e.nameKey)
-								.map(e => ({
-									id: e.id,
-									category_id: e.categoryId ?? null,
-									category_external_key: e.category?.nameKey ?? undefined,
-									name_key: e.nameKey,
-									emoji: e.emoji,
-									intensity_default: e.intensityDefault ?? 5,
-									synonyms: Array.isArray(e.synonyms)
-										? e.synonyms.filter(s => typeof s === 'string')
-										: [],
-									opposite_emotion_id: e.oppositeEmotionId ?? undefined,
-									sort_order: e.sortOrder ?? 0,
-									is_active: e.isActive ?? true,
-									server_updated_at: new Date().toISOString(),
-								}));
-
-							const upserted = await invoke<number>('sync_emotions_from_server', {
-								emotions: emotionsPayload,
-								categories: categoriesPayload,
-							});
-							console.log(`✅ Каталог эмоций синкнут в SQLite: ${upserted}`);
+							console.log('🔁 Проверка каталога эмоций после логина (фон)...');
+							const upserted = await syncEmotionsCatalog();
+							console.log(`✅ Каталог эмоций: upsert ${upserted}`);
 						} catch (syncErr) {
 							console.warn('⚠️ Ошибка синка эмоций после логина:', syncErr);
 						}
@@ -226,12 +236,30 @@ export function useEmotions() {
 		isLoading.value = true;
 		error.value = null;
 
-		// Читаем строго из локальной БД (источник истины)
+		// Локальная БД — источник истины; если в ней пусто — дофетчиваем с API
 		try {
-			const [catsLocal, emotionsLocal] = await Promise.all([
+			let [catsLocal, emotionsLocal] = await Promise.all([
 				databaseService.getEmotionCategoriesLocal(),
 				databaseService.getEmotionsLocal(),
 			]);
+
+			if (
+				(catsLocal.length === 0 || emotionsLocal.length === 0) &&
+				navigator.onLine &&
+				authService.isAuthenticated()
+			) {
+				console.log('📭 Локальный каталог эмоций пуст — дофетчиваем с API...');
+				try {
+					await syncEmotionsCatalog();
+					[catsLocal, emotionsLocal] = await Promise.all([
+						databaseService.getEmotionCategoriesLocal(),
+						databaseService.getEmotionsLocal(),
+					]);
+				} catch (fetchErr) {
+					console.warn('⚠️ Дофетч каталога эмоций не удался:', fetchErr);
+				}
+			}
+
 			categories.value = catsLocal;
 			emotions.value = emotionsLocal;
 		} catch (localErr: any) {
@@ -661,42 +689,46 @@ export function useSync() {
 					}
 				}
 
-				// После применения serverOps делаем безопасную сверку с сервером и подтягиваем недостающие записи
-				try {
-					const srv = await cbtService.getEntries({ limit: 1000 });
-					if (srv.success && Array.isArray(srv.data)) {
-						for (const e of srv.data) {
-							const payload: any = {
-								situation: e.situation,
-								thoughts: (e.thoughts || []).map((t: any) => ({
-									thought: t.thought,
-									isAutomatic: !!(t.isAutomatic || t.is_automatic),
-									intensity: Number(t.intensity ?? 5),
-									emotions: (t.emotions || [])
-										.map((em: any) => ({
-											emotionId: em.emotionId ?? em.emotion_id,
-											intensity: Number(em.intensity ?? 5),
-										}))
-										.filter((em: any) => em.emotionId != null),
-									cognitiveDistortions:
-										t.cognitiveDistortions || t.cognitive_distortions || [],
-								})),
-								reactions: e.reactions,
-								moodScoreBefore: e.moodScoreBefore,
-								moodScoreAfter: e.moodScoreAfter,
-								tags: e.tags || [],
-								entryDate:
-									(e as any).entryDate ||
-									(e as any).createdAt ||
-									(e as any).created_at,
-							};
-							try {
-								await databaseService.upsertCBTEntryFromServer(e.id, payload);
-							} catch {}
+				// Полную сверку (pull всех записей) делаем ТОЛЬКО на бутстрапе —
+				// когда локальная БД пуста. В обычном цикле хватает инкрементальных
+				// serverOperations: не перезаписываем локальные данные каждый синк.
+				if (localEntries.length === 0) {
+					try {
+						const srv = await cbtService.getEntries({ limit: 1000 });
+						if (srv.success && Array.isArray(srv.data)) {
+							for (const e of srv.data) {
+								const payload: any = {
+									situation: e.situation,
+									thoughts: (e.thoughts || []).map((t: any) => ({
+										thought: t.thought,
+										isAutomatic: !!(t.isAutomatic || t.is_automatic),
+										intensity: Number(t.intensity ?? 5),
+										emotions: (t.emotions || [])
+											.map((em: any) => ({
+												emotionId: em.emotionId ?? em.emotion_id,
+												intensity: Number(em.intensity ?? 5),
+											}))
+											.filter((em: any) => em.emotionId != null),
+										cognitiveDistortions:
+											t.cognitiveDistortions || t.cognitive_distortions || [],
+									})),
+									reactions: e.reactions,
+									moodScoreBefore: e.moodScoreBefore,
+									moodScoreAfter: e.moodScoreAfter,
+									tags: e.tags || [],
+									entryDate:
+										(e as any).entryDate ||
+										(e as any).createdAt ||
+										(e as any).created_at,
+								};
+								try {
+									await databaseService.upsertCBTEntryFromServer(e.id, payload);
+								} catch {}
+							}
 						}
+					} catch (impErr) {
+						console.warn('⚠️ Bootstrap pull не удался:', impErr);
 					}
-				} catch (impErr) {
-					console.warn('⚠️ Сверка с сервером (pull) не удалась:', impErr);
 				}
 
 				lastSyncTime.value = resp.newSyncTimestamp || resp.lastSyncTimestamp;
@@ -708,55 +740,6 @@ export function useSync() {
 				try {
 					const refreshed = await databaseService.getCBTEntries(100);
 					console.log('🔄 Локальные записи после serverOps:', refreshed.length);
-
-					// Fallback-bootstrap: если локально пусто, тянем с сервера и импортируем
-					if (refreshed.length === 0) {
-						try {
-							const srv = await cbtService.getEntries({ limit: 1000 });
-							if (
-								srv.success &&
-								Array.isArray(srv.data) &&
-								srv.data.length > 0
-							) {
-								for (const e of srv.data) {
-									const payload: any = {
-										situation: e.situation,
-										thoughts: (e.thoughts || []).map((t: any) => ({
-											thought: t.thought,
-											isAutomatic: !!(t.isAutomatic || t.is_automatic),
-											intensity: Number(t.intensity ?? 5),
-											emotions: (t.emotions || [])
-												.map((em: any) => ({
-													emotionId: em.emotionId ?? em.emotion_id,
-													intensity: Number(em.intensity ?? 5),
-												}))
-												.filter((em: any) => em.emotionId != null),
-											cognitiveDistortions:
-												t.cognitiveDistortions || t.cognitive_distortions || [],
-										})),
-										reactions: e.reactions,
-										moodScoreBefore: e.moodScoreBefore,
-										moodScoreAfter: e.moodScoreAfter,
-										tags: e.tags || [],
-										entryDate:
-											(e as any).createdAt ||
-											(e as any).created_at ||
-											(e as any).entryDate,
-									};
-									try {
-										await databaseService.createCBTEntry(payload);
-									} catch {}
-								}
-								const afterImport = await databaseService.getCBTEntries(100);
-								console.log(
-									'📥 Импортировано с сервера в локальную БД:',
-									afterImport.length
-								);
-							}
-						} catch (impErr) {
-							console.warn('⚠️ Bootstrap pull не удался:', impErr);
-						}
-					}
 				} catch {}
 
 				// Проверяем конфликты безопасно

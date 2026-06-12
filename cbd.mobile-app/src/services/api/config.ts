@@ -49,6 +49,7 @@ export const API_CONFIG = {
 
 		// Chat endpoints
 		CHAT: {
+			LIST: '/chat',
 			BY_ENTRY: (entryId: string) => `/chat/entries/${entryId}`,
 			MESSAGES: (chatId: string) => `/chat/${chatId}/messages`,
 			FINALIZE: (chatId: string) => `/chat/${chatId}/finalize`,

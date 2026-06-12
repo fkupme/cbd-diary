@@ -418,6 +418,7 @@ onUnmounted(() => {
 	console.log("[CHAT] unmounted");
 	clearFallback();
 	cleanup.value?.();
+	if (chat.value?.id) socketService.leaveChat(chat.value.id);
 	const vk: any = (navigator as any).virtualKeyboard;
 	if (vk) {
 		vk.overlaysContent = false;

@@ -22,6 +22,17 @@ export class ChatService {
 		return res.data as unknown as Chat;
 	}
 
+	/** Все чаты пользователя одним запросом (id + cbtEntryId) — для батч-проверки */
+	async listChats(): Promise<Chat[]> {
+		const res = await apiClient.request<ApiResponse<Chat[]>>(
+			'GET',
+			API_CONFIG.ENDPOINTS.CHAT.LIST
+		);
+		if (!res.success)
+			throw new Error((res as any).error?.message || 'Chat error');
+		return (res.data as unknown as Chat[]) || [];
+	}
+
 	async getByEntry(entryId: string): Promise<Chat | null> {
 		const res = await apiClient.request<ApiResponse<Chat | null>>(
 			'GET',

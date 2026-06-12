@@ -555,8 +555,10 @@ fn remap_emotion_ids_in_thoughts(
 }
 
 // Каталог эмоций локально не сидится: сервер — источник истины.
-// Каталог пересобирается с СЕРВЕРНЫМИ id (категории и эмоции), а ссылки
-// на старые локальные id в существующих записях ремапятся по name_key.
+// Синк ИНКРЕМЕНТАЛЬНЫЙ: upsert по серверным id (без DELETE FROM + перезаливки),
+// исчезнувшие с сервера строки удаляются точечно, ссылки на старые локальные id
+// в существующих записях ремапятся по name_key. Если каталог не изменился —
+// выходим, не трогая БД вообще.
 #[tauri::command]
 async fn sync_emotions_from_server(
     emotions: Vec<UpsertEmotionPayload>,
@@ -574,38 +576,69 @@ async fn sync_emotions_from_server(
     let now = chrono::Utc::now().to_rfc3339();
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
-    // 1. Текущее соответствие локальный id -> name_key (до замены каталога)
+    // 1. Текущее соответствие локальный id -> name_key (до изменения каталога)
     let old_rows: Vec<(i64, String)> = sqlx::query_as("SELECT id, name_key FROM emotions")
         .fetch_all(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
 
-    // 2. Снимаем FK-ссылки статистики на старые id (восстановим после ремапа)
-    let stats_refs: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT user_id, most_common_emotion_id FROM user_stats WHERE most_common_emotion_id IS NOT NULL",
-    )
-    .fetch_all(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
-    sqlx::query("UPDATE user_stats SET most_common_emotion_id = NULL")
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+    // 2. Быстрый выход: локальный каталог уже совпадает с серверным
+    let local_emotions: Vec<(i64, String, String)> =
+        sqlx::query_as("SELECT id, name_key, emoji FROM emotions")
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    let local_categories: Vec<(i64, String, String)> =
+        sqlx::query_as("SELECT id, name_key, color FROM emotion_categories")
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    let server_emotion_set: std::collections::HashSet<(i64, &str, &str)> = emotions
+        .iter()
+        .filter_map(|e| {
+            e.id.map(|id| {
+                (
+                    id as i64,
+                    e.name_key.as_str(),
+                    e.emoji.as_deref().unwrap_or("😐"),
+                )
+            })
+        })
+        .collect();
+    let server_category_set: std::collections::HashSet<(i64, &str, &str)> = categories
+        .iter()
+        .map(|c| {
+            (
+                c.id as i64,
+                c.name_key.as_str(),
+                c.color.as_deref().unwrap_or("#999999"),
+            )
+        })
+        .collect();
+    let local_emotion_set: std::collections::HashSet<(i64, &str, &str)> = local_emotions
+        .iter()
+        .map(|(id, key, emoji)| (*id, key.as_str(), emoji.as_str()))
+        .collect();
+    let local_category_set: std::collections::HashSet<(i64, &str, &str)> = local_categories
+        .iter()
+        .map(|(id, key, color)| (*id, key.as_str(), color.as_str()))
+        .collect();
+    if local_emotion_set == server_emotion_set && local_category_set == server_category_set {
+        log::info!("✅ Каталог эмоций актуален — синк не требуется");
+        return Ok(0);
+    }
 
-    // 3. Полная замена каталога: сначала дети (emotions), потом родители
-    sqlx::query("DELETE FROM emotions")
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
-    sqlx::query("DELETE FROM emotion_categories")
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
-
+    // 3. Upsert категорий (родители — первыми)
     for c in &categories {
         sqlx::query(
             r#"INSERT INTO emotion_categories (id, name_key, color, icon, sort_order, is_active, created_at)
-               VALUES (?, ?, COALESCE(?, '#999999'), ?, COALESCE(?, 0), COALESCE(?, TRUE), ?)"#,
+               VALUES (?, ?, COALESCE(?, '#999999'), ?, COALESCE(?, 0), COALESCE(?, TRUE), ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   name_key = excluded.name_key,
+                   color = excluded.color,
+                   icon = excluded.icon,
+                   sort_order = excluded.sort_order,
+                   is_active = excluded.is_active"#,
         )
         .bind(c.id)
         .bind(&c.name_key)
@@ -624,7 +657,7 @@ async fn sync_emotions_from_server(
         .map(|c| (c.name_key.as_str(), c.id))
         .collect();
 
-    // Эмоции вставляем с NULL opposite (self-FK), связи проставляем вторым проходом
+    // 4. Upsert эмоций с NULL opposite (self-FK), связи проставляем вторым проходом
     let mut inserted = 0usize;
     for e in &emotions {
         let Some(server_id) = e.id else {
@@ -644,7 +677,17 @@ async fn sync_emotions_from_server(
             .map_err(|err| err.to_string())?;
         sqlx::query(
             r#"INSERT INTO emotions (id, category_id, name_key, emoji, intensity_default, synonyms, opposite_emotion_id, sort_order, is_active, created_at, server_updated_at)
-               VALUES (?, ?, ?, COALESCE(?, '😐'), COALESCE(?, 5), ?, NULL, COALESCE(?, 0), COALESCE(?, TRUE), ?, ?)"#,
+               VALUES (?, ?, ?, COALESCE(?, '😐'), COALESCE(?, 5), ?, NULL, COALESCE(?, 0), COALESCE(?, TRUE), ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   category_id = excluded.category_id,
+                   name_key = excluded.name_key,
+                   emoji = excluded.emoji,
+                   intensity_default = excluded.intensity_default,
+                   synonyms = excluded.synonyms,
+                   opposite_emotion_id = NULL,
+                   sort_order = excluded.sort_order,
+                   is_active = excluded.is_active,
+                   server_updated_at = excluded.server_updated_at"#,
         )
         .bind(server_id)
         .bind(category_id)
@@ -721,19 +764,70 @@ async fn sync_emotions_from_server(
         }
     }
 
-    // 5. Восстанавливаем статистику в новом id-пространстве (только то, что замапилось)
-    for (user_id, old_ref) in stats_refs {
-        if let Some(new_ref) = remap.get(&old_ref) {
+    // 5. Ремап статистики в новое id-пространство
+    for (old_id, new_id) in &remap {
+        if old_id != new_id {
             sqlx::query(
-                "UPDATE user_stats SET most_common_emotion_id = ? WHERE user_id = ? AND EXISTS (SELECT 1 FROM emotions WHERE id = ?)",
+                "UPDATE user_stats SET most_common_emotion_id = ? WHERE most_common_emotion_id = ?",
             )
-            .bind(new_ref)
-            .bind(&user_id)
-            .bind(new_ref)
+            .bind(new_id)
+            .bind(old_id)
             .execute(&mut *tx)
             .await
             .map_err(|err| err.to_string())?;
         }
+    }
+
+    // 6. Точечно удаляем строки, исчезнувшие с сервера (ссылки уже перемаплены)
+    let server_emotion_ids: std::collections::HashSet<i64> = emotions
+        .iter()
+        .filter_map(|e| e.id.map(|id| id as i64))
+        .collect();
+    let server_category_ids: std::collections::HashSet<i64> =
+        categories.iter().map(|c| c.id as i64).collect();
+
+    let current_emotion_ids: Vec<(i64,)> = sqlx::query_as("SELECT id FROM emotions")
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut removed = 0usize;
+    for (id,) in current_emotion_ids {
+        if !server_emotion_ids.contains(&id) {
+            sqlx::query(
+                "UPDATE user_stats SET most_common_emotion_id = NULL WHERE most_common_emotion_id = ?",
+            )
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+            sqlx::query("UPDATE emotions SET opposite_emotion_id = NULL WHERE opposite_emotion_id = ?")
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| e.to_string())?;
+            sqlx::query("DELETE FROM emotions WHERE id = ?")
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| e.to_string())?;
+            removed += 1;
+        }
+    }
+    let current_category_ids: Vec<(i64,)> = sqlx::query_as("SELECT id FROM emotion_categories")
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    for (id,) in current_category_ids {
+        if !server_category_ids.contains(&id) {
+            sqlx::query("DELETE FROM emotion_categories WHERE id = ?")
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    if removed > 0 {
+        log::info!("🧹 Удалено {} эмоций, исчезнувших с сервера", removed);
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;

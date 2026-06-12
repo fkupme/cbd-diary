@@ -50,8 +50,21 @@
 				</div>
 			</div>
 
+			<!-- Скелетон: данные ещё подтягиваются (локально пусто, идёт дофетч) -->
+			<ul class="entries" v-if="showSkeleton" aria-hidden="true">
+				<li v-for="n in 3" :key="'sk-' + n" class="page-card sk-card">
+					<div class="sk-line sk-time"></div>
+					<div class="sk-line sk-text"></div>
+					<div class="sk-line sk-text sk-short"></div>
+					<div class="sk-tags">
+						<span class="sk-chip"></span>
+						<span class="sk-chip"></span>
+					</div>
+				</li>
+			</ul>
+
 			<!-- Записи -->
-			<ul class="entries" v-if="filteredEntries.length > 0">
+			<ul class="entries" v-else-if="filteredEntries.length > 0">
 				<li
 					v-for="entry in filteredEntries"
 					:key="entry.id"
@@ -187,6 +200,11 @@ const activeFilter = ref("all");
 const expandedEntries = ref(new Set<string>());
 const query = ref("");
 
+// Скелетон только на «холодном» старте: локально пусто и идёт загрузка/дофетч
+const showSkeleton = computed(
+	() => cbtStore.isLoading && cbtStore.entries.length === 0
+);
+
 const sortBy = ref<"date_desc" | "date_asc" | "emotion" | "thought_len">(
 	"date_desc"
 );
@@ -308,20 +326,32 @@ async function loadEmotions() {
 	}
 }
 
-async function hydrateChatFlags(limit: number = 30) {
+async function hydrateChatFlags() {
+	// Один GET /chat вместо N запросов по каждой записи: сервер отдаёт все
+	// чаты пользователя (id + cbtEntryId), маппим локально.
 	try {
-		const entries = cbtStore.entries.slice(0, limit) as any[];
-		const tasks = entries
-			.filter((e) => !(e as any).chatId && !(e as any).chat_id)
-			.map(async (e) => {
-				try {
-					const exists = await chatService.getByEntry(e.id);
-					if (exists) {
-						(e as any).chatId = exists.id;
-					}
-				} catch {}
-			});
-		await Promise.all(tasks.map((p) => p.catch(() => undefined)));
+		const needHydration = (cbtStore.entries as any[]).some(
+			(e) => !(e as any).chatId && !(e as any).chat_id
+		);
+		if (!needHydration) return;
+
+		const chats = await chatService.listChats();
+		if (!chats.length) return;
+
+		const chatByEntry = new Map<string, string>();
+		for (const c of chats) {
+			if ((c as any).cbtEntryId) chatByEntry.set((c as any).cbtEntryId, c.id);
+		}
+
+		for (const e of cbtStore.entries as any[]) {
+			if ((e as any).chatId || (e as any).chat_id) continue;
+			const chatId =
+				chatByEntry.get(e.id) ||
+				chatByEntry.get((e as any).serverId || (e as any).server_id || "");
+			if (chatId) {
+				cbtStore.setEntryChatId(e.id, chatId);
+			}
+		}
 	} catch (err) {
 		console.warn("Не удалось проверить наличие чатов:", err);
 	}
@@ -507,6 +537,60 @@ onMounted(() => {
 	max-width: 440px;
 	margin: 0 auto;
 	padding: max(6dvh, 36px) 24px 24px;
+}
+
+/* ===== Скелетон загрузки ===== */
+.sk-card {
+	pointer-events: none;
+}
+.sk-line {
+	height: 12px;
+	border-radius: 6px;
+	background: linear-gradient(
+		90deg,
+		rgba(237, 230, 214, 0.06) 25%,
+		rgba(237, 230, 214, 0.13) 50%,
+		rgba(237, 230, 214, 0.06) 75%
+	);
+	background-size: 200% 100%;
+	animation: sk-shimmer 1.4s ease-in-out infinite;
+	margin-bottom: 10px;
+}
+.sk-time {
+	width: 38%;
+	height: 10px;
+}
+.sk-text {
+	width: 92%;
+}
+.sk-short {
+	width: 64%;
+}
+.sk-tags {
+	display: flex;
+	gap: 8px;
+	margin-top: 4px;
+}
+.sk-chip {
+	width: 72px;
+	height: 20px;
+	border-radius: 10px;
+	background: linear-gradient(
+		90deg,
+		rgba(237, 230, 214, 0.06) 25%,
+		rgba(237, 230, 214, 0.13) 50%,
+		rgba(237, 230, 214, 0.06) 75%
+	);
+	background-size: 200% 100%;
+	animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes sk-shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -200% 0;
+	}
 }
 
 /* ===== Шапка ===== */

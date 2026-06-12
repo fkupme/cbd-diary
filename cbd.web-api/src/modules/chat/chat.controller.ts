@@ -23,6 +23,16 @@ export class ChatController {
     throw new Error('Unauthorized: unable to determine user id');
   }
 
+  @Get()
+  @ApiOperation({
+    summary: 'Список чатов пользователя (id + cbtEntryId, для батч-проверки)',
+  })
+  async listChats(@Req() req: Request) {
+    const userId = this.extractUserId(req);
+    const chats = await this.chatService.listChats(userId);
+    return createApiResponse(chats, req.url);
+  }
+
   @Post('entries/:entryId')
   @ApiOperation({
     summary: 'Создать чат для записи (или получить существующий)',

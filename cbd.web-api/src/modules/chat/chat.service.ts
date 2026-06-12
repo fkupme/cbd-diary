@@ -481,6 +481,14 @@ export class ChatService {
     return chat;
   }
 
+  async listChats(userId: string) {
+    return this.prisma.chat.findMany({
+      where: { userId },
+      select: { id: true, cbtEntryId: true, createdAt: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
   async addMessage(
     userId: string,
     chatId: string,

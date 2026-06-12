@@ -12,7 +12,15 @@ import {
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 
-@WebSocketGateway({ namespace: '/ws/chat', cors: { origin: '*' } })
+// pingInterval/pingTimeout заданы явно: вебвью мобильного приложения в фоне
+// троттлит таймеры и пропускает понги — даём 60с форы вместо дефолтных 20с,
+// чтобы короткий фон/идл не убивал соединение.
+@WebSocketGateway({
+  namespace: '/ws/chat',
+  cors: { origin: '*' },
+  pingInterval: 25000,
+  pingTimeout: 60000,
+})
 export class ChatGateway implements OnGatewayConnection {
   @WebSocketServer()
   server: Server;
@@ -66,7 +74,16 @@ export class ChatGateway implements OnGatewayConnection {
     if (!userId) {
       this.logger.warn(`WS disconnect (no auth): id=${client.id}`);
       client.disconnect(true);
+      return;
     }
+    // Токен проверяем ОДИН раз на хендшейке и кэшируем userId на соединении.
+    // Иначе access-токен (TTL 15 мин) истекает посреди живой сессии, очередное
+    // событие не проходит verify и сокет молча убивается disconnect(true).
+    client.data.userId = userId;
+  }
+
+  private resolveUserId(client: Socket): string | null {
+    return (client.data?.userId as string) || this.getUserIdFromSocket(client);
   }
 
   @SubscribeMessage('join')
@@ -74,7 +91,7 @@ export class ChatGateway implements OnGatewayConnection {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { chatId: string },
   ) {
-    const userId = this.getUserIdFromSocket(client);
+    const userId = this.resolveUserId(client);
     if (!userId) return client.disconnect(true);
     this.logger.log(`join: user=${userId}, chat=${payload?.chatId}`);
     client.join(`chat:${payload.chatId}`);
@@ -100,7 +117,7 @@ export class ChatGateway implements OnGatewayConnection {
       content: string;
     },
   ) {
-    const userId = this.getUserIdFromSocket(client);
+    const userId = this.resolveUserId(client);
     if (!userId) return client.disconnect(true);
     const role = payload.role || 'USER';
     const msg = await this.chatService.addMessage(
@@ -119,7 +136,7 @@ export class ChatGateway implements OnGatewayConnection {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { chatId: string },
   ) {
-    const userId = this.getUserIdFromSocket(client);
+    const userId = this.resolveUserId(client);
     if (!userId) return client.disconnect(true);
     this.logger.log(`ai_generate: user=${userId}, chat=${payload?.chatId}`);
 

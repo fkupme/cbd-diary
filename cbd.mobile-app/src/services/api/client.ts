@@ -145,6 +145,33 @@ export class ApiClient {
 	}
 
 	/**
+	 * Вернуть актуальный access token, при необходимости обновив его.
+	 * Используется сокетами: им нужен свежий токен на каждую попытку коннекта.
+	 */
+	public async ensureFreshAccessToken(): Promise<string | null> {
+		await this.ensureInitialized();
+		if (!this.authToken) return null;
+
+		// Токен ещё жив (с запасом 30с на дорогу) — отдаём как есть
+		try {
+			const payload = JSON.parse(atob(this.authToken.split('.')[1]));
+			const now = Math.floor(Date.now() / 1000);
+			if (payload.exp && payload.exp > now + 30) {
+				return this.authToken;
+			}
+		} catch {
+			return this.authToken;
+		}
+
+		if (!this.refreshToken) return this.authToken;
+		try {
+			return await this.refreshAccessToken();
+		} catch {
+			return null;
+		}
+	}
+
+	/**
 	 * Обновить access token
 	 */
 	private async refreshAccessToken(): Promise<string> {
