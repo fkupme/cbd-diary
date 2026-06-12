@@ -69,6 +69,10 @@ jobs:
             # иначе устаревший секрет перебивал дефолт и резал прод по CORS.
             CORS_ALL="https://cbd-diary.ru,https://www.cbd-diary.ru"
             if [ -n "${CORS_ORIGIN}" ]; then CORS_ALL="${CORS_ALL},${CORS_ORIGIN}"; fi
+            # ВАЖНО: docker compose интерполирует ${CORS_ORIGIN} из env ШЕЛЛА
+            # ПРИОРИТЕТНЕЕ .env-файла. Поэтому перезаписываем сам шелл-var, иначе
+            # сырой секрет (без cbd-diary.ru) уходит в контейнер и режет CORS.
+            export CORS_ORIGIN="${CORS_ALL}"
 
             # .env для docker compose собирается из GitHub Secrets —
             # единственный источник истины, на сервере руками не правится
