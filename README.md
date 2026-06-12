@@ -6,6 +6,12 @@
 Capture a moment out loud, untangle it into *situation → thoughts → emotions → reaction*,
 and talk it through with an AI guide. Offline-first, Android (Tauri Mobile) + desktop.
 
+<br>
+
+<img src="docs/demo.gif" alt="CBD Diary — walkthrough" width="300">
+
+<br><br>
+
 [![Stars](https://img.shields.io/github/stars/fkupme/cbd-diary?style=social)](https://github.com/fkupme/cbd-diary/stargazers)
 [![Issues](https://img.shields.io/github/issues/fkupme/cbd-diary)](https://github.com/fkupme/cbd-diary/issues)
 [![CI](https://img.shields.io/github/actions/workflow/status/fkupme/cbd-diary/ci.yml?label=CI)](https://github.com/fkupme/cbd-diary/actions)
