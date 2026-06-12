@@ -61,3 +61,6 @@ ios/
 # Sensitive keystore / certs (keep out of VCS). If really needed, store encrypted elsewhere.
 **/android-keystore/*.jks
 **/android-keystore/*.pem
+# Сборки Android (не коммитим — >100MB, GitHub режет)
+*.apk
+cbd-diary.apk
