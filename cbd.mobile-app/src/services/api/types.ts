@@ -84,6 +84,9 @@ export interface User {
 	id: string;
 	email: string;
 	username?: string;
+	// Плоское имя — фактический контракт бэка (раньше было profile.firstName/lastName).
+	name?: string;
+	preferredLanguage?: string;
 	createdAt: string;
 	updatedAt: string;
 	profile?: UserProfile;

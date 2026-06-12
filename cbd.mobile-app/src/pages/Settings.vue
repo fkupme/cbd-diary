@@ -1,245 +1,261 @@
 <template>
-	<div class="settings-page">
-		<div class="settings-container">
-			<h1 class="page-title">{{ t("settings.title") }}</h1>
+	<div class="settings-page diary-theme">
+		<div class="settings-inner">
+			<header class="settings-head">
+				<h1 class="settings-title">{{ t("settings.title") }}</h1>
+			</header>
 
 			<!-- Профиль пользователя -->
-			<div class="settings-section">
-				<h2 class="section-title">{{ t("settings.profile") }}</h2>
-				<div class="settings-list">
-					<q-item class="setting-item" clickable @click="editProfile">
-						<q-item-section>
-							<div class="setting-info">
-								<q-icon name="person" class="setting-icon" />
-								<span class="setting-label"
-									>{{ t("common.edit") }}
-									{{ t("settings.profile").toLowerCase() }}</span
-								>
-							</div>
-						</q-item-section>
-						<q-item-section side>
-							<q-icon name="chevron_right" class="setting-arrow" />
-						</q-item-section>
-					</q-item>
+			<section class="set-group">
+				<h2 class="group-label">{{ t("settings.profile") }}</h2>
+				<div class="group-card">
+					<button class="set-row" @click="editProfile">
+						<span class="set-left">
+							<q-icon name="person" class="set-icon" />
+							<span class="set-label"
+								>{{ t("common.edit") }}
+								{{ t("settings.profile").toLowerCase() }}</span
+							>
+						</span>
+						<q-icon name="chevron_right" class="set-chevron" />
+					</button>
 
-					<q-item class="setting-item" clickable @click="exportData">
-						<q-item-section>
-							<div class="setting-info">
-								<q-icon name="download" class="setting-icon" />
-								<span class="setting-label">{{
-									t("settings.exportData", "Экспорт данных")
-								}}</span>
-							</div>
-						</q-item-section>
-						<q-item-section side>
-							<q-icon name="chevron_right" class="setting-arrow" />
-						</q-item-section>
-					</q-item>
+					<button class="set-row" @click="exportData">
+						<span class="set-left">
+							<q-icon name="download" class="set-icon" />
+							<span class="set-label">{{
+								t("settings.exportData", "Экспорт данных")
+							}}</span>
+						</span>
+						<q-icon name="chevron_right" class="set-chevron" />
+					</button>
 				</div>
-			</div>
+			</section>
 
 			<!-- Уведомления -->
-			<div class="settings-section">
-				<h2 class="section-title">{{ t("settings.notifications") }}</h2>
-				<div class="settings-list">
-					<div class="setting-item">
-						<div class="setting-info">
-							<q-icon name="notifications_active" class="setting-icon" />
-							<span class="setting-label">{{
+			<section class="set-group">
+				<h2 class="group-label">{{ t("settings.notifications") }}</h2>
+				<div class="group-card">
+					<div class="set-row">
+						<span class="set-left">
+							<q-icon name="notifications_active" class="set-icon" />
+							<span class="set-label">{{
 								t("settings.pushEnabled", "Получать уведомления")
 							}}</span>
-						</div>
-						<q-toggle
-							v-model="pushEnabled"
-							color="primary"
-							@update:model-value="onTogglePush"
-						/>
+						</span>
+						<button
+							type="button"
+							class="set-switch"
+							:class="{ 'is-on': pushEnabled }"
+							role="switch"
+							:aria-checked="pushEnabled"
+							@click="
+								pushEnabled = !pushEnabled;
+								onTogglePush(pushEnabled);
+							"
+						>
+							<span class="switch-track" aria-hidden="true">
+								<span class="switch-thumb"></span>
+							</span>
+						</button>
 					</div>
-					<div class="setting-item">
-						<div class="setting-info">
-							<q-icon name="notifications" class="setting-icon" />
-							<span class="setting-label">{{
+					<div class="set-row">
+						<span class="set-left">
+							<q-icon name="notifications" class="set-icon" />
+							<span class="set-label">{{
 								t("settings.reminders", "Напоминания о записях")
 							}}</span>
-						</div>
-						<q-toggle
-							v-model="settings.notifications.reminders"
-							color="primary"
-							@update:model-value="saveSettings"
-						/>
+						</span>
+						<button
+							type="button"
+							class="set-switch"
+							:class="{ 'is-on': settings.notifications.reminders }"
+							role="switch"
+							:aria-checked="settings.notifications.reminders"
+							@click="
+								settings.notifications.reminders =
+									!settings.notifications.reminders;
+								saveSettings();
+							"
+						>
+							<span class="switch-track" aria-hidden="true">
+								<span class="switch-thumb"></span>
+							</span>
+						</button>
 					</div>
-					<div class="setting-item">
-						<div class="setting-info">
-							<q-icon name="schedule" class="setting-icon" />
-							<span class="setting-label">{{
+					<div class="set-row">
+						<span class="set-left">
+							<q-icon name="schedule" class="set-icon" />
+							<span class="set-label">{{
 								t("settings.dailyInsights", "Ежедневные инсайты")
 							}}</span>
-						</div>
-						<q-toggle
-							v-model="settings.notifications.insights"
-							color="primary"
-							@update:model-value="saveSettings"
-						/>
+						</span>
+						<button
+							type="button"
+							class="set-switch"
+							:class="{ 'is-on': settings.notifications.insights }"
+							role="switch"
+							:aria-checked="settings.notifications.insights"
+							@click="
+								settings.notifications.insights =
+									!settings.notifications.insights;
+								saveSettings();
+							"
+						>
+							<span class="switch-track" aria-hidden="true">
+								<span class="switch-thumb"></span>
+							</span>
+						</button>
 					</div>
 				</div>
-			</div>
+			</section>
 
 			<!-- Приложение -->
-			<div class="settings-section">
-				<h2 class="section-title">{{ t("settings.app", "Приложение") }}</h2>
-				<div class="settings-list">
-					<div class="setting-item">
-						<div class="setting-info">
-							<q-icon name="dark_mode" class="setting-icon" />
-							<span class="setting-label">{{
+			<section class="set-group">
+				<h2 class="group-label">{{ t("settings.app", "Приложение") }}</h2>
+				<div class="group-card">
+					<!-- Переключатель светлой темы временно скрыт -->
+					<div v-if="showThemeToggle" class="set-row">
+						<span class="set-left">
+							<q-icon name="dark_mode" class="set-icon" />
+							<span class="set-label">{{
 								t("settings.darkMode", "Темная тема")
 							}}</span>
-						</div>
-						<q-toggle
-							v-model="settings.app.darkMode"
-							color="primary"
-							@update:model-value="toggleDarkMode"
-						/>
+						</span>
+						<button
+							type="button"
+							class="set-switch"
+							:class="{ 'is-on': settings.app.darkMode }"
+							role="switch"
+							:aria-checked="settings.app.darkMode"
+							@click="
+								settings.app.darkMode = !settings.app.darkMode;
+								toggleDarkMode(settings.app.darkMode);
+							"
+						>
+							<span class="switch-track" aria-hidden="true">
+								<span class="switch-thumb"></span>
+							</span>
+						</button>
 					</div>
 
-					<q-item
-						class="setting-item"
-						clickable
-						@click="showLanguageDialog = true"
-					>
-						<q-item-section>
-							<div class="setting-info">
-								<q-icon name="language" class="setting-icon" />
-								<span class="setting-label">{{ t("settings.language") }}</span>
-							</div>
-						</q-item-section>
-						<q-item-section side>
-							<div class="setting-value">
-								<span>{{ currentLanguageInfo.name }}</span>
-								<q-icon name="chevron_right" class="setting-arrow" />
-							</div>
-						</q-item-section>
-					</q-item>
+					<button class="set-row" @click="showLanguageDialog = true">
+						<span class="set-left">
+							<q-icon name="language" class="set-icon" />
+							<span class="set-label">{{ t("settings.language") }}</span>
+						</span>
+						<span class="set-value">
+							<span>{{ currentLanguageInfo.name }}</span>
+							<q-icon name="chevron_right" class="set-chevron" />
+						</span>
+					</button>
 				</div>
-			</div>
+			</section>
 
 			<!-- Безопасность -->
-			<div class="settings-section">
-				<h2 class="section-title">{{ t("settings.privacy") }}</h2>
-				<div class="settings-list">
-					<div class="setting-item">
-						<div class="setting-info">
-							<q-icon name="fingerprint" class="setting-icon" />
-							<span class="setting-label">Биометрический вход</span>
-						</div>
-						<q-toggle
-							v-model="settings.security.biometric"
-							color="primary"
-							@update:model-value="saveSettings"
-						/>
+			<section class="set-group">
+				<h2 class="group-label">{{ t("settings.privacy") }}</h2>
+				<div class="group-card">
+					<div class="set-row">
+						<span class="set-left">
+							<q-icon name="fingerprint" class="set-icon" />
+							<span class="set-label">Биометрический вход</span>
+						</span>
+						<button
+							type="button"
+							class="set-switch"
+							:class="{ 'is-on': settings.security.biometric }"
+							role="switch"
+							:aria-checked="settings.security.biometric"
+							@click="
+								settings.security.biometric =
+									!settings.security.biometric;
+								saveSettings();
+							"
+						>
+							<span class="switch-track" aria-hidden="true">
+								<span class="switch-thumb"></span>
+							</span>
+						</button>
 					</div>
 
-					<q-item class="setting-item" clickable @click="clearData">
-						<q-item-section>
-							<div class="setting-info">
-								<q-icon name="delete_forever" class="setting-icon danger" />
-								<span class="setting-label danger">{{
-									t("settings.clearAll", "Очистить все данные")
-								}}</span>
-							</div>
-						</q-item-section>
-						<q-item-section side>
-							<q-icon name="chevron_right" class="setting-arrow" />
-						</q-item-section>
-					</q-item>
+					<button class="set-row" @click="clearData">
+						<span class="set-left">
+							<q-icon name="delete_forever" class="set-icon danger" />
+							<span class="set-label danger">{{
+								t("settings.clearAll", "Очистить все данные")
+							}}</span>
+						</span>
+						<q-icon name="chevron_right" class="set-chevron" />
+					</button>
 				</div>
-			</div>
+			</section>
 
 			<!-- О приложении -->
-			<div class="settings-section">
-				<h2 class="section-title">{{ t("settings.about") }}</h2>
-				<div class="settings-list">
-					<div class="setting-item">
-						<div class="setting-info">
-							<q-icon name="info" class="setting-icon" />
-							<span class="setting-label">{{ t("settings.version") }}</span>
-						</div>
-						<span class="setting-value">1.0.0</span>
+			<section class="set-group">
+				<h2 class="group-label">{{ t("settings.about") }}</h2>
+				<div class="group-card">
+					<div class="set-row">
+						<span class="set-left">
+							<q-icon name="info" class="set-icon" />
+							<span class="set-label">{{ t("settings.version") }}</span>
+						</span>
+						<span class="set-value">1.0.0</span>
 					</div>
 
-					<q-item class="setting-item" clickable @click="showAbout">
-						<q-item-section>
-							<div class="setting-info">
-								<q-icon name="help" class="setting-icon" />
-								<span class="setting-label">{{ t("settings.help") }}</span>
-							</div>
-						</q-item-section>
-						<q-item-section side>
-							<q-icon name="chevron_right" class="setting-arrow" />
-						</q-item-section>
-					</q-item>
+					<button class="set-row" @click="showAbout">
+						<span class="set-left">
+							<q-icon name="help" class="set-icon" />
+							<span class="set-label">{{ t("settings.help") }}</span>
+						</span>
+						<q-icon name="chevron_right" class="set-chevron" />
+					</button>
 
-					<q-item class="setting-item" clickable @click="showPrivacy">
-						<q-item-section>
-							<div class="setting-info">
-								<q-icon name="privacy_tip" class="setting-icon" />
-								<span class="setting-label">{{
-									t("settings.privacyPolicy")
-								}}</span>
-							</div>
-						</q-item-section>
-						<q-item-section side>
-							<q-icon name="chevron_right" class="setting-arrow" />
-						</q-item-section>
-					</q-item>
+					<button class="set-row" @click="showPrivacy">
+						<span class="set-left">
+							<q-icon name="privacy_tip" class="set-icon" />
+							<span class="set-label">{{ t("settings.privacyPolicy") }}</span>
+						</span>
+						<q-icon name="chevron_right" class="set-chevron" />
+					</button>
 
-					<q-item class="setting-item" clickable @click="openLogs">
-						<q-item-section>
-							<div class="setting-info">
-								<q-icon name="bug_report" class="setting-icon" />
-								<span class="setting-label">{{ t("settings.debugLogs") }}</span>
-							</div>
-						</q-item-section>
-						<q-item-section side>
-							<q-icon name="chevron_right" class="setting-arrow" />
-						</q-item-section>
-					</q-item>
+					<button class="set-row" @click="openLogs">
+						<span class="set-left">
+							<q-icon name="bug_report" class="set-icon" />
+							<span class="set-label">{{ t("settings.debugLogs") }}</span>
+						</span>
+						<q-icon name="chevron_right" class="set-chevron" />
+					</button>
 				</div>
-			</div>
+			</section>
 
 			<!-- Выход -->
-			<div class="logout-section">
-				<CbdButton variant="ghost" size="lg" class="logout-btn" @click="logout">
-					{{ t("settings.logout") }}
-				</CbdButton>
-			</div>
-
-			<!-- Секция тестов и отладочных опций скрыта до подключения -->
-			<!-- Dev/Test security section removed -->
+			<button class="logout-btn" @click="logout">
+				<q-icon name="logout" />
+				{{ t("settings.logout") }}
+			</button>
 		</div>
 
 		<!-- Диалог выбора языка -->
 		<q-dialog v-model="showLanguageDialog">
-			<q-card class="language-dialog">
-				<q-card-section>
-					<div class="text-h6">{{ t("settings.languageSelect") }}</div>
-				</q-card-section>
-
-				<q-card-section>
-					<q-list>
-						<q-item
-							v-for="lang in availableLanguages"
-							:key="lang.code"
-							clickable
-							@click="selectLanguage(lang.code)"
-						>
-							<q-item-section>{{ lang.name }}</q-item-section>
-							<q-item-section side v-if="currentLanguage === lang.code">
-								<q-icon name="check" color="primary" />
-							</q-item-section>
-						</q-item>
-					</q-list>
-				</q-card-section>
+			<q-card class="language-dialog diary-theme">
+				<div class="lang-title">{{ t("settings.languageSelect") }}</div>
+				<ul class="lang-list">
+					<li
+						v-for="lang in availableLanguages"
+						:key="lang.code"
+						class="lang-item"
+						:class="{ active: currentLanguage === lang.code }"
+						@click="selectLanguage(lang.code)"
+					>
+						<span>{{ lang.name }}</span>
+						<q-icon
+							v-if="currentLanguage === lang.code"
+							name="check"
+							class="lang-check"
+						/>
+					</li>
+				</ul>
 			</q-card>
 		</q-dialog>
 	</div>
@@ -249,7 +265,6 @@
 import { Dark } from "quasar";
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { CbdButton } from "../components/ui";
 import { useLocalization } from "../composables/useLocalization";
 import { userService } from "../services/api";
 import { ServiceManager } from "../services/ServiceManager";
@@ -296,6 +311,10 @@ const settings = ref<AppSettings>({
 
 const showLanguageDialog = ref(false);
 const pushEnabled = ref<boolean>(true);
+
+// Переключатель светлой/тёмной темы временно скрыт (приложение в «вечерней» палитре).
+// Поставь true, чтобы вернуть свитч в раздел «Приложение».
+const showThemeToggle = false;
 
 function editProfile() {
 	router.push("/profile");
@@ -365,14 +384,8 @@ function clearData() {
 }
 
 function showAbout() {
-	alert(
-		String(
-			t(
-				"settings.aboutText",
-				"CBD Дневник v1.0.0\nПриложение для отслеживания эмоций и настроения"
-			)
-		)
-	);
+	// «Справка» теперь ведёт на страницу «Как это работает» (FAQ по КПТ)
+	router.push("/help");
 }
 
 function showPrivacy() {
@@ -462,161 +475,249 @@ onMounted(() => {
 
 <style scoped>
 .settings-page {
-	min-height: 100vh;
-	background: var(--bg-secondary);
-	padding-bottom: 80px;
-	transition: background-color var(--transition-base) var(--ease-in-out);
+	padding-bottom: 96px;
 }
 
-.settings-container {
-	max-width: 500px;
-	margin: 0 auto;
-	padding: var(--space-4);
-}
-
-.page-title {
-	font-size: var(--text-3xl);
-	font-weight: var(--font-bold);
-	color: var(--text-primary);
-	margin-bottom: var(--space-6);
-}
-
-.settings-section {
-	margin-bottom: var(--space-6);
-}
-
-.section-title {
-	font-size: var(--text-xl);
-	font-weight: var(--font-semibold);
-	color: var(--text-primary);
-	margin-bottom: var(--space-4);
-}
-
-.settings-list {
-	background: var(--bg-primary);
-	border-radius: var(--radius-lg);
-	overflow: hidden;
-	box-shadow: var(--shadow-sm);
-	border: 1px solid var(--border-color);
-}
-
-.setting-item {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	padding: var(--space-4);
-	border: none;
-	background: transparent;
+.settings-inner {
 	width: 100%;
-	cursor: pointer;
-	transition: background-color var(--transition-fast) var(--ease-in-out);
-	border-bottom: 1px solid var(--border-color);
+	max-width: 440px;
+	margin: 0 auto;
+	padding: max(6dvh, 36px) 24px 24px;
 }
 
-.setting-item:last-child {
+/* ===== Шапка ===== */
+.settings-head {
+	margin-bottom: 22px;
+	animation: rise 0.5s ease-out both;
+}
+.settings-title {
+	font-family: "Spectral", Georgia, serif;
+	font-weight: 500;
+	font-size: clamp(30px, 9vw, 38px);
+	letter-spacing: -0.015em;
+	margin: 0;
+}
+
+/* ===== Группы ===== */
+.set-group {
+	margin-bottom: 26px;
+	animation: rise 0.5s ease-out 0.06s both;
+}
+
+.group-label {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--paper-dim);
+	margin: 0 0 10px 4px;
+}
+
+.group-card {
+	background: rgba(26, 31, 43, 0.6);
+	border: 1px solid var(--line);
+	border-radius: 16px;
+	overflow: hidden;
+}
+
+/* ===== Строки ===== */
+.set-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	width: 100%;
+	padding: 14px 16px;
+	border: none;
+	border-bottom: 1px solid var(--line);
+	background: transparent;
+	color: inherit;
+	font-family: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.18s ease;
+}
+.set-row:last-child {
 	border-bottom: none;
 }
-
-.setting-item:hover {
-	background: var(--bg-hover);
+button.set-row:hover {
+	background: rgba(240, 178, 100, 0.06);
 }
 
-.setting-info {
+.set-left {
 	display: flex;
 	align-items: center;
-	gap: var(--space-3);
+	gap: 13px;
+	min-width: 0;
 }
 
-.setting-icon {
-	font-size: 20px;
-	color: var(--text-secondary);
+.set-icon {
+	font-size: 21px;
+	color: var(--paper-dim);
 	width: 24px;
+	flex-shrink: 0;
+}
+.set-icon.danger {
+	color: var(--coral);
 }
 
-.setting-icon.danger {
-	color: var(--error);
+.set-label {
+	font-size: 15px;
+	color: var(--paper);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.set-label.danger {
+	color: var(--coral);
 }
 
-.setting-label {
-	font-size: var(--text-base);
-	color: var(--text-primary);
-}
-
-.setting-label.danger {
-	color: var(--error);
-}
-
-.setting-value {
+.set-value {
 	display: flex;
 	align-items: center;
-	gap: var(--space-2);
-	font-size: var(--text-base);
-	color: var(--text-secondary);
+	gap: 4px;
+	font-size: 14px;
+	color: var(--paper-dim);
+	flex-shrink: 0;
 }
 
-.setting-arrow {
-	font-size: 16px;
-	color: var(--text-tertiary);
+.set-chevron {
+	font-size: 20px;
+	color: rgba(151, 144, 126, 0.6);
+	flex-shrink: 0;
 }
 
-.logout-section {
-	margin-top: var(--space-8);
-	text-align: center;
+/* ===== Переключатель (как в онбординге, шаг 3) ===== */
+.set-switch {
+	flex-shrink: 0;
+	border: none;
+	background: none;
+	padding: 0;
+	cursor: pointer;
+}
+.switch-track {
+	display: block;
+	width: 46px;
+	height: 26px;
+	border-radius: 999px;
+	background: rgba(237, 230, 214, 0.18);
+	position: relative;
+	transition: background 0.25s ease;
+}
+.switch-thumb {
+	position: absolute;
+	top: 3px;
+	left: 3px;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background: var(--paper-dim);
+	transition: transform 0.25s ease, background 0.25s ease;
+}
+.set-switch.is-on .switch-track {
+	background: rgba(240, 178, 100, 0.35);
+}
+.set-switch.is-on .switch-thumb {
+	transform: translateX(20px);
+	background: var(--lamp);
+}
+.set-switch:focus-visible .switch-track {
+	outline: 2px solid var(--lamp);
+	outline-offset: 2px;
 }
 
+/* ===== Выход ===== */
 .logout-btn {
 	width: 100%;
-	color: var(--error) !important;
-	border-color: var(--error) !important;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	margin-top: 8px;
+	appearance: none;
+	border: 1px solid rgba(226, 109, 92, 0.45);
+	background: transparent;
+	color: var(--coral);
+	font-family: inherit;
+	font-size: 15px;
+	font-weight: 500;
+	padding: 14px;
+	border-radius: 14px;
+	cursor: pointer;
+	transition: background 0.2s ease;
 }
-
+.logout-btn .q-icon {
+	font-size: 19px;
+}
 .logout-btn:hover {
-	background: var(--error-bg) !important;
-	color: var(--error) !important;
+	background: rgba(226, 109, 92, 0.1);
 }
 
+/* ===== Диалог языка ===== */
 .language-dialog {
-	min-width: 300px;
-	background: var(--bg-primary);
+	min-width: 280px;
+	min-height: auto;
+	padding: 20px;
+	border-radius: 18px !important;
+	border: 1px solid var(--line);
+	box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+}
+.lang-title {
+	font-family: "Spectral", Georgia, serif;
+	font-size: 20px;
+	margin-bottom: 14px;
+	color: var(--paper);
+}
+.lang-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.lang-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 14px;
+	border-radius: 11px;
+	color: var(--paper);
+	font-size: 15px;
+	cursor: pointer;
+	transition: background 0.18s ease, color 0.18s ease;
+}
+.lang-item:hover {
+	background: rgba(237, 230, 214, 0.06);
+}
+.lang-item.active {
+	color: var(--lamp);
+	background: rgba(240, 178, 100, 0.08);
+}
+.lang-check {
+	font-size: 19px;
+	color: var(--lamp);
 }
 
-.language-dialog .q-list .q-item {
-	padding: var(--space-3) var(--space-4);
-}
-
-/* Стили для переключателей */
-:deep(.q-toggle .q-toggle__track) {
-	background: var(--border-color);
-}
-
-:deep(.q-toggle .q-toggle__thumb) {
-	background: var(--bg-primary);
-	box-shadow: var(--shadow-sm);
-}
-
-:deep(.q-toggle.q-toggle--truthy .q-toggle__track) {
-	background: var(--primary);
-}
-
-/* Темная тема для диалогов */
 :deep(.q-dialog__backdrop) {
-	background: var(--bg-overlay);
+	background: rgba(8, 10, 14, 0.7);
 }
 
-:deep(.q-card) {
-	background: var(--bg-primary);
-	color: var(--text-primary);
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
-:deep(.q-item) {
-	color: var(--text-primary);
-}
-
-:deep(.q-item:hover) {
-	background: var(--bg-hover);
-}
-
-:deep(.q-item__section--side) {
-	color: var(--primary);
+@media (prefers-reduced-motion: reduce) {
+	.settings-head,
+	.set-group {
+		animation: none;
+	}
 }
 </style> 

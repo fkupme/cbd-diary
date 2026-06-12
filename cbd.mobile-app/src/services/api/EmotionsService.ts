@@ -333,7 +333,9 @@ export class EmotionsService {
 			for (const lang of languages) {
 				try {
 					const resp = await apiClient.get<Record<string, string>>(
-						`/i18n/${lang}`
+						`/i18n/${lang}`,
+						undefined,
+						{ requireAuth: false }
 					);
 					if (resp.success && resp.data) {
 						bundles[lang] = resp.data;
@@ -342,25 +344,29 @@ export class EmotionsService {
 				} catch {}
 			}
 
-			// 2) Fallback: если какие-то языки не пришли, собираем из текущих данных эмоций/категорий
-			const categoriesResp = await this.getEmotionCategories();
-			for (const lang of languages) {
-				if (bundles[lang]) continue;
-				const map: Record<string, string> = {};
-				if (categoriesResp.success) {
-					for (const c of categoriesResp.data) {
-						map[c.name] = c.name;
+			// 2) Fallback: если какие-то языки не пришли и пользователь авторизован
+			if (apiClient.isAuthenticated()) {
+				try {
+					const categoriesResp = await this.getEmotionCategories();
+					const emResp = await this.getEmotions({ limit: 0 });
+					for (const lang of languages) {
+						if (bundles[lang]) continue;
+						const map: Record<string, string> = {};
+						if (categoriesResp.success) {
+							for (const c of categoriesResp.data) {
+								map[c.name] = c.name;
+							}
+						}
+						if (emResp.success) {
+							for (const e of emResp.data as any[]) {
+								const key = e.name_key || e.nameKey || e.name;
+								const value = e.name || key;
+								if (key) map[key] = value;
+							}
+						}
+						bundles[lang] = map;
 					}
-				}
-				const emResp = await this.getEmotions({ limit: 0 });
-				if (emResp.success) {
-					for (const e of emResp.data as any[]) {
-						const key = e.name_key || e.nameKey || e.name;
-						const value = e.name || key;
-						if (key) map[key] = value;
-					}
-				}
-				bundles[lang] = map;
+				} catch {}
 			}
 			return bundles;
 		} catch (e) {

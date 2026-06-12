@@ -1,38 +1,9 @@
-import { isTauriRuntime } from './api/config';
 import type { HttpRequestOptions, HttpResponse } from './types';
 
-// Динамический импорт Tauri fetch только когда доступен
-let tauriFetch: typeof fetch | null = null;
-
-// Проверяем доступность Tauri и импортируем fetch
-const initializeTauriFetch = async () => {
-	try {
-		if (isTauriRuntime()) {
-			const tauriHttp = await import('@tauri-apps/plugin-http');
-			tauriFetch = tauriHttp.fetch;
-			console.log('🌐 Используем Tauri fetch для мобильного приложения');
-		} else {
-			console.log('🌐 Используем браузерный fetch для веб-версии');
-		}
-	} catch (error) {
-		console.warn(
-			'⚠️ Tauri fetch недоступен, используем браузерный fetch:',
-			error
-		);
-	}
-};
-
-// Универсальная функция fetch
-const universalFetch = async (
-	input: RequestInfo | URL,
-	init?: RequestInit
-): Promise<Response> => {
-	if (tauriFetch) {
-		return tauriFetch(input, init);
-	} else {
-		return window.fetch(input, init);
-	}
-};
+// Всегда используем браузерный fetch — CORS уже настроен на сервере
+// для http://tauri.localhost. Tauri plugin-http на Android имеет баг:
+// ReadableStream тела ответа никогда не доставляет данные.
+const universalFetch = window.fetch.bind(window);
 
 export class HttpService {
 	private static instance: HttpService;
@@ -56,9 +27,6 @@ export class HttpService {
 
 	async initialize(baseURL?: string): Promise<boolean> {
 		try {
-			// Инициализируем правильный fetch
-			await initializeTauriFetch();
-
 			this.baseURL = baseURL || '';
 
 			// Устанавливаем базовые заголовки
@@ -148,29 +116,19 @@ export class HttpService {
 				body: request.body ? JSON.stringify(request.body) : undefined,
 			});
 
-			console.log(`📨 [${response.status}] Ответ получен от ${fullUrl}`);
-			try {
-				const respHeadersOut = JSON.stringify(
-					Object.fromEntries(response.headers.entries())
-				);
-				console.log(`📨 Заголовки ответа: ${respHeadersOut}`);
-			} catch {
-				console.log('📨 Заголовки ответа: [unserializable]');
-			}
+		console.log(`📨 [${response.status}] Ответ получен от ${fullUrl}`);
 
 			let parsedBody: any = null;
 			try {
-				const text = await response.text();
-				parsedBody = text ? JSON.parse(text) : null;
-			} catch (parseError) {
-				console.warn('⚠️ Ошибка парсинга JSON:', parseError);
-				parsedBody = null;
-			}
-			try {
-				const bodyStr = JSON.stringify(parsedBody);
-				console.log(`📨 Тело ответа: ${bodyStr}`);
+				parsedBody = await response.json();
 			} catch {
-				console.log('📨 Тело ответа: [unserializable]');
+				try {
+					const text = await response.text();
+					parsedBody = text ? JSON.parse(text) : null;
+				} catch (parseError) {
+					console.warn('⚠️ Ошибка парсинга тела ответа:', parseError);
+					parsedBody = null;
+				}
 			}
 
 			// Сформируем стандартный ответ HttpResponse

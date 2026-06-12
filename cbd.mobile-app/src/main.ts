@@ -34,10 +34,12 @@ app.use(Quasar, {
 // Инициализируем i18n store и синхронизируем с vue-i18n
 async function initializeApp() {
 	const i18nStore = useI18nStore();
-	await i18nStore.initialize();
 
 	// Синхронизируем язык между store и vue-i18n
 	i18n.global.locale.value = i18nStore.currentLanguage as 'ru' | 'en';
+
+	// Загружаем переводы в фоне — не блокируем маунт приложения
+	i18nStore.initialize().catch(console.error);
 
 	// Проверяем сохраненные настройки темной темы
 	const savedSettings = localStorage.getItem('cbd-diary-settings');

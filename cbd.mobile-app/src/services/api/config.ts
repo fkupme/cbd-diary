@@ -164,7 +164,21 @@ export function getCurrentBaseURL(): string {
 		return API_CONFIG.BASE_URL.staging;
 	}
 
-	// В development пробуем разные варианты
+	// В development берём API с того же хоста, с которого реально загрузилась
+	// страница. Вебвью Tauri в dev грузит фронт с Vite dev-сервера, поэтому
+	// window.location.hostname = адрес машины разработчика. Это автоматически
+	// даёт правильную базу для всех окружений:
+	//   - браузер на десктопе      → localhost:3002
+	//   - Android-эмулятор          → 10.0.2.2:3002 (страница грузится с 10.0.2.2:1420)
+	//   - физическое устройство     → <LAN-IP>:3002 (там же, где висит Vite)
+	// Хардкод localhost/10.0.2.2 не работал на реальном телефоне (localhost = сам
+	// телефон, 10.0.2.2 — только эмулятор), отсюда был ERR_EMPTY_RESPONSE.
+	const derived = deriveDevBaseURLFromLocation();
+	if (derived) {
+		return derived;
+	}
+
+	// Фолбэк, если window недоступен (SSR/воркер): прежнее поведение по платформе.
 	const isMobile = isTauriRuntime();
 
 	if (isMobile) {
@@ -182,6 +196,26 @@ export function getCurrentBaseURL(): string {
 }
 
 /**
+ * Собрать dev base URL из текущего адреса страницы (host машины с Vite/бэком).
+ * Возвращает null, если window недоступен или страница открыта из нативного
+ * продакшен-вебвью (схема tauri/asset, hostname вроде `tauri.localhost`),
+ * где такой эвристике доверять нельзя.
+ */
+function deriveDevBaseURLFromLocation(): string | null {
+	if (typeof window === 'undefined' || !window.location) {
+		return null;
+	}
+
+	const { hostname, protocol } = window.location;
+	if (!hostname || hostname === 'tauri.localhost' || protocol === 'tauri:') {
+		return null;
+	}
+
+	const scheme = protocol === 'https:' ? 'https' : 'http';
+	return `${scheme}://${hostname}:3002/api/v1`;
+}
+
+/**
  * Получить список всех возможных URLs для fallback
  */
 export function getFallbackURLs(): string[] {
@@ -192,9 +226,11 @@ export function getFallbackURLs(): string[] {
 		return uniqueURLs([configuredBaseURL, getCurrentBaseURL()]);
 	}
 
-	// В development предоставляем несколько вариантов
+	// В development предоставляем несколько вариантов; первым — хост текущей
+	// страницы (реальный адрес машины разработчика), затем статические фолбэки.
 	return uniqueURLs([
 		configuredBaseURL,
+		deriveDevBaseURLFromLocation(),
 		API_CONFIG.BASE_URL.development,
 		API_CONFIG.BASE_URL.local,
 		API_CONFIG.BASE_URL.androidEmulator,

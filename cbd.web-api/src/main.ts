@@ -33,13 +33,33 @@ async function bootstrap() {
       .get(Logger)
       .log('🌐 CORS настроен для development (все origins разрешены)');
   } else {
+    // Origin'ы вебвью мобильного приложения (Tauri) — константны и должны быть
+    // разрешены всегда, иначе fetch из приложения рубится CORS-preflight'ом
+    // (origin 'http://tauri.localhost' на Android, 'tauri://localhost' на iOS).
+    const mobileWebviewOrigins = [
+      'http://tauri.localhost',
+      'https://tauri.localhost',
+      'tauri://localhost',
+    ];
+    const configuredOrigins = String(corsOrigin || '')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean);
+    const allowedOrigins = Array.from(
+      new Set([...configuredOrigins, ...mobileWebviewOrigins]),
+    );
+
     app.enableCors({
-      origin: corsOrigin,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      origin: allowedOrigins,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'User-Agent'],
       credentials: true,
     });
-    app.get(Logger).log('🌐 CORS настроен для production');
+    app
+      .get(Logger)
+      .log(
+        `🌐 CORS настроен для production (origins: ${allowedOrigins.join(', ')})`,
+      );
   }
 
   // Глобальные пайпы для валидации

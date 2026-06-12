@@ -444,6 +444,41 @@ const updateWheelRotation = (deltaY: number) => {
 	} else if (currentStep.value === 3) {
 		currentRotation.value.intensity += rotationDelta;
 	}
+
+	// Подсвечиваем центральный элемент сразу во время прокрутки, а не только
+	// после отпускания — иначе .selected «отстаёт» от того, что под рамкой.
+	syncSelectedToCenter();
+};
+
+// Текущий индекс по центру = -rotation / itemHeight (как в finishWheelSelection)
+const syncSelectedToCenter = () => {
+	const itemHeight = 80;
+	let options: any[] = [];
+	let rotation = 0;
+
+	if (currentStep.value === 1) {
+		options = categoryOptions.value;
+		rotation = currentRotation.value.category;
+	} else if (currentStep.value === 2) {
+		options = emotionOptions.value;
+		rotation = currentRotation.value.emotion;
+	} else {
+		options = intensityOptions.value;
+		rotation = currentRotation.value.intensity;
+	}
+
+	if (options.length === 0) return;
+
+	let idx = Math.round(-rotation / itemHeight);
+	idx = Math.max(0, Math.min(idx, options.length - 1));
+
+	if (currentStep.value === 1) {
+		selectedCategoryIndex.value = idx;
+	} else if (currentStep.value === 2) {
+		selectedEmotionIndex.value = idx;
+	} else {
+		selectedIntensityIndex.value = idx;
+	}
 };
 
 const finishWheelSelection = () => {
@@ -619,6 +654,12 @@ function quickPickEmotion(item: Emotion) {
 	if (emotionIndex >= 0) {
 		selectedEmotionIndex.value = emotionIndex;
 	}
+	// Центрируем интенсивность как в обычном потоке (шаг 2 → 3)
+	selectedIntensityIndex.value = 4;
+	currentRotation.value.intensity = -4 * 80;
+	// Выходим из режима поиска — иначе список висит поверх колеса и кажется,
+	// что выбор «не срабатывает».
+	searchQuery.value = "";
 	currentStep.value = 3;
 }
 
@@ -891,21 +932,8 @@ function quickPickEmotionId(emotionIdStr: string) {
 	cursor: grabbing;
 }
 
-/* Центральная «рамка выбора» — тёплая полоса */
-.wheel-3d::before {
-	content: "";
-	position: absolute;
-	left: 8px;
-	right: 8px;
-	top: 50%;
-	height: 64px;
-	transform: translateY(-50%);
-	border-radius: 14px;
-	border: 1px solid rgba(240, 178, 100, 0.28);
-	background: rgba(240, 178, 100, 0.05);
-	pointer-events: none;
-	z-index: 0;
-}
+/* Центральная «рамка выбора» убрана — подсветки самого выбранного элемента
+   (.wheel-item.selected) достаточно, иначе получается двойная обводка. */
 
 .wheel-item {
 	position: absolute;

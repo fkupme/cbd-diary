@@ -16,7 +16,11 @@
 				<section class="form-group">
 					<div class="group-header">
 						<h3 class="group-label">{{ t("entry.situation", "Ситуация") }}</h3>
-						<q-icon name="help_outline" class="help-ic">
+						<q-icon
+							name="help_outline"
+							class="help-ic"
+							@click="openHelp('situation')"
+						>
 							<q-tooltip class="diary-tooltip">
 								{{
 									t(
@@ -42,7 +46,11 @@
 						<h3 class="group-label">
 							{{ t("entry.thoughtsAndEmotions", "Мысли и эмоции") }}
 						</h3>
-						<q-icon name="help_outline" class="help-ic">
+						<q-icon
+							name="help_outline"
+							class="help-ic"
+							@click="openHelp('thoughts')"
+						>
 							<q-tooltip class="diary-tooltip">
 								{{
 									t(
@@ -134,7 +142,11 @@
 				<section class="form-group">
 					<div class="group-header">
 						<h3 class="group-label">{{ t("entry.reactions", "Реакции") }}</h3>
-						<q-icon name="help_outline" class="help-ic">
+						<q-icon
+							name="help_outline"
+							class="help-ic"
+							@click="openHelp('reactions')"
+						>
 							<q-tooltip class="diary-tooltip">
 								{{
 									t(
@@ -180,15 +192,39 @@
 			:emotions="emotionsForWheel"
 			@select="onEmotionSelected"
 		/>
+
+		<!-- Подсказка «как это работает» — bottom-sheet поверх формы.
+		     Открывается из «?» рядом с разделами, форму НЕ покидаем. -->
+		<q-dialog v-model="helpOpen" position="bottom">
+			<q-card class="help-sheet diary-theme">
+				<div class="sheet-grip"></div>
+				<div class="help-sheet-head">
+					<h2 class="help-sheet-title">
+						{{ t("help.title", "Как это работает") }}
+					</h2>
+					<button
+						class="sheet-icon-btn"
+						@click="helpOpen = false"
+						aria-label="Закрыть"
+					>
+						<q-icon name="close" />
+					</button>
+				</div>
+				<div class="help-sheet-body">
+					<CbtFaqAccordion :items="faq" :focus-id="helpFocus" />
+				</div>
+			</q-card>
+		</q-dialog>
 	</div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { CbdEmotionWheelPicker } from "../components/ui";
+import { CbdEmotionWheelPicker, CbtFaqAccordion } from "../components/ui";
 import { useKeyboardHandling } from "../composables/useKeyboardHandling";
 import { useLocalization } from "../composables/useLocalization";
+import { CBT_FAQ, FAQ_FOCUS } from "../data/cbtFaq";
 
 // Обновляем импорты для новых stores и композаблов
 import { useSync } from "../composables/useApiIntegration";
@@ -231,6 +267,15 @@ const reactions = ref("");
 // Колесо эмоций
 const showingEmotionWheel = ref(false);
 const currentChainIndex = ref(0);
+
+// Подсказка «как это работает» (bottom-sheet, без ухода со страницы)
+const faq = CBT_FAQ;
+const helpOpen = ref(false);
+const helpFocus = ref<string>("smer");
+function openHelp(field: keyof typeof FAQ_FOCUS) {
+	helpFocus.value = FAQ_FOCUS[field];
+	helpOpen.value = true;
+}
 
 const canSave = computed(() => {
 	return (
@@ -527,9 +572,78 @@ useKeyboardHandling(".add-entry-page", 320);
 	margin: 0;
 }
 .help-ic {
-	font-size: 16px;
-	color: rgba(151, 144, 126, 0.6);
-	cursor: help;
+	font-size: 17px;
+	color: rgba(151, 144, 126, 0.7);
+	cursor: pointer;
+	transition: color 0.2s ease;
+}
+.help-ic:hover {
+	color: var(--lamp);
+}
+
+/* ===== Подсказка-bottom-sheet ===== */
+.help-sheet.diary-theme {
+	min-height: 0;
+	max-height: 88vh;
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	border-radius: 24px 24px 0 0;
+	background:
+		radial-gradient(
+			120% 80% at 50% -10%,
+			rgba(240, 178, 100, 0.08) 0%,
+			rgba(240, 178, 100, 0) 55%
+		),
+		#14181f;
+	border-top: 1px solid var(--line);
+	box-shadow: 0 -24px 60px -20px rgba(0, 0, 0, 0.7);
+	color: var(--paper);
+	font-family: "Onest", system-ui, sans-serif;
+}
+.help-sheet .sheet-grip {
+	width: 38px;
+	height: 4px;
+	border-radius: 999px;
+	background: rgba(237, 230, 214, 0.22);
+	margin: 10px auto 2px;
+	flex-shrink: 0;
+}
+.help-sheet-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 18px 12px;
+	flex-shrink: 0;
+}
+.help-sheet-title {
+	margin: 0;
+	font-family: "Spectral", Georgia, serif;
+	font-weight: 500;
+	font-size: 20px;
+	letter-spacing: -0.01em;
+	color: var(--paper);
+}
+.help-sheet .sheet-icon-btn {
+	flex-shrink: 0;
+	width: 36px;
+	height: 36px;
+	display: grid;
+	place-items: center;
+	border: 1px solid var(--line);
+	background: rgba(237, 230, 214, 0.04);
+	color: var(--paper-dim);
+	border-radius: 50%;
+	cursor: pointer;
+}
+.help-sheet .sheet-icon-btn .q-icon {
+	font-size: 19px;
+}
+.help-sheet-body {
+	padding: 4px 16px calc(20px + env(safe-area-inset-bottom));
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
 }
 
 /* ===== Текстовые поля ===== */

@@ -40,23 +40,47 @@ export class NotificationsGateway
   }
 
   handleConnection(client: Socket) {
-    const userId = this.getUserIdFromSocket(client);
-    if (!userId) {
-      client.disconnect(true);
-      return;
-    }
+    // Любая ошибка в обработчике подключения НЕ должна ронять процесс:
+    // необработанное исключение здесь убивало весь HTTP-сервер (ERR_EMPTY_RESPONSE).
+    try {
+      const userId = this.getUserIdFromSocket(client);
+      if (!userId) {
+        client.disconnect(true);
+        return;
+      }
 
-    // Закрываем предыдущее подключение пользователя, если есть
-    const prevId = this.userSocket.get(userId);
-    if (prevId && prevId !== client.id) {
-      const prev = this.server.sockets.sockets.get(prevId);
+      // Закрываем предыдущее подключение пользователя, если есть
+      const prevId = this.userSocket.get(userId);
+      if (prevId && prevId !== client.id) {
+        const prev = this.findSocketById(prevId);
+        try {
+          prev?.disconnect(true);
+        } catch {}
+      }
+
+      this.userSocket.set(userId, client.id);
+      client.join(`user:${userId}`);
+    } catch (err) {
+      console.error('[NotificationsGateway] handleConnection error:', err);
       try {
-        prev?.disconnect(true);
+        client.disconnect(true);
       } catch {}
     }
+  }
 
-    this.userSocket.set(userId, client.id);
-    client.join(`user:${userId}`);
+  // Найти сокет по id, не завязываясь на то, инжектится ли в @WebSocketServer()
+  // корневой Server или Namespace (у Namespace `.sockets` уже Map, у Server —
+  // это namespace, а Map лежит в `.sockets.sockets`). Раньше хардкод
+  // `server.sockets.sockets.get` падал на namespaced-гейтвее.
+  private findSocketById(id: string): Socket | undefined {
+    const srv: any = this.server;
+    if (srv?.sockets instanceof Map) {
+      return srv.sockets.get(id);
+    }
+    if (srv?.sockets?.sockets instanceof Map) {
+      return srv.sockets.sockets.get(id);
+    }
+    return undefined;
   }
 
   handleDisconnect(client: Socket) {

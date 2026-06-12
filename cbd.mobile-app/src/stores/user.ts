@@ -269,10 +269,11 @@ export const useUserStore = defineStore('user', () => {
 
 	// Computed для удобства
 	const hasFullProfile = computed(() => {
-		return (
-			user.value &&
-			user.value.profile &&
-			(user.value.profile.firstName || user.value.profile.lastName)
+		const u: any = user.value;
+		// Бэк отдаёт плоское `name`; legacy-форма profile.firstName/lastName — как фолбэк.
+		return !!(
+			u &&
+			(u.name?.trim() || u.profile?.firstName || u.profile?.lastName)
 		);
 	});
 

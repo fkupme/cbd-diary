@@ -1,24 +1,26 @@
 <template>
-	<div class="analytics-page">
-		<div class="analytics-container">
-			<h1 class="page-title">{{ t("analytics.title", "Аналитика") }}</h1>
+	<div class="analytics-page diary-theme">
+		<div class="analytics-inner">
+			<header class="analytics-head">
+				<h1 class="analytics-title">{{ t("analytics.title", "Аналитика") }}</h1>
+			</header>
 
 			<!-- Переключатель периодов -->
-			<div class="tabs">
-				<q-btn-toggle
-					v-model="activeTab"
-					:options="tabs"
-					color="primary"
-					text-color="white"
-					unelevated
-					rounded
-					size="sm"
-				/>
+			<div class="period-row">
+				<button
+					v-for="tab in tabs"
+					:key="tab.value"
+					class="period-chip"
+					:class="{ active: activeTab === tab.value }"
+					@click="activeTab = tab.value"
+				>
+					{{ tab.label }}
+				</button>
 			</div>
 
 			<!-- Статистика за период -->
-			<div class="stats-section">
-				<h2 class="section-title">
+			<section class="block">
+				<h2 class="block-label">
 					{{ t("analytics.periodStats", "Статистика за период") }}
 				</h2>
 				<div class="stats-grid">
@@ -35,47 +37,51 @@
 						</div>
 					</div>
 					<div class="stat-card">
-						<div class="stat-value">{{ periodStats.topEmotionEmoji }}</div>
+						<div class="stat-value stat-top">
+							<i
+								class="stat-dot"
+								:style="{ background: periodStats.topEmotionColor }"
+							></i>
+							<span class="stat-top-name">{{ periodStats.topEmotionName }}</span>
+						</div>
 						<div class="stat-label">
 							{{ t("analytics.topEmotion", "Топ эмоция") }}
 						</div>
 					</div>
 				</div>
-			</div>
+			</section>
 
 			<!-- График записей по дням -->
-			<div class="mood-chart">
-				<h2 class="section-title">
+			<section class="block">
+				<h2 class="block-label">
 					{{ t("analytics.entriesTimeline", "Активность по дням") }}
 				</h2>
-				<div class="chart-placeholder" style="height: 220px">
+				<div class="chart-card" style="height: 220px">
 					<canvas ref="lineCanvas"></canvas>
 				</div>
-			</div>
+			</section>
 
 			<!-- Разнообразие категорий эмоций -->
-			<div class="diversity-section">
-				<h2 class="section-title">
-					{{
-						t("analytics.categoryDiversity", "Разнообразие категорий эмоций")
-					}}
+			<section class="block" v-if="diversity">
+				<h2 class="block-label">
+					{{ t("analytics.categoryDiversity", "Разнообразие категорий эмоций") }}
 				</h2>
-				<div class="diversity-grid" v-if="diversity">
-					<div class="diversity-card">
+				<div class="diversity-grid">
+					<div class="metric-card">
 						<div class="metric-value">{{ diversity.uniqueCategories }}</div>
 						<div class="metric-label">
 							{{ t("analytics.uniqueCategories", "Уникальных категорий") }}
 						</div>
 					</div>
-					<div class="diversity-card">
+					<div class="metric-card">
 						<div class="metric-value">{{ diversity.shannon.toFixed(2) }}</div>
 						<div class="metric-label">Shannon</div>
 					</div>
-					<div class="diversity-card">
+					<div class="metric-card">
 						<div class="metric-value">{{ diversity.simpson.toFixed(2) }}</div>
 						<div class="metric-label">Simpson</div>
 					</div>
-					<div class="diversity-card">
+					<div class="metric-card">
 						<div class="metric-value">{{ diversity.evenness.toFixed(2) }}</div>
 						<div class="metric-label">
 							{{ t("analytics.evenness", "Равномерность") }}
@@ -83,10 +89,10 @@
 					</div>
 				</div>
 				<div
-					v-if="diversity && diversity.distribution.length"
-					class="diversity-chart"
+					v-if="diversity.distribution.length"
+					class="chart-card diversity-chart"
 				>
-					<div class="chart-placeholder" style="height: 220px; width: 220px">
+					<div class="doughnut-wrap">
 						<canvas ref="doughnutCanvas"></canvas>
 					</div>
 					<ul class="legend">
@@ -97,7 +103,7 @@
 							<span
 								class="swatch"
 								:style="{
-									background: colorForIndex(i, diversity.distribution.length),
+									background: categoryHex(d.categoryId, i, diversity.distribution.length),
 								}"
 							></span>
 							<span class="name">{{ t(d.categoryName, d.categoryName) }}</span>
@@ -105,11 +111,11 @@
 						</li>
 					</ul>
 				</div>
-			</div>
+			</section>
 
 			<!-- Анализ эмоций из бэка -->
-			<div class="emotions-analysis">
-				<h2 class="section-title">
+			<section class="block" v-if="emotionsFromSummary.length">
+				<h2 class="block-label">
 					{{ t("analytics.emotionsAnalysis", "Анализ эмоций") }}
 				</h2>
 				<div class="emotions-list">
@@ -119,7 +125,10 @@
 						class="emotion-item"
 					>
 						<div class="emotion-info">
-							<span class="emotion-emoji">{{ emotion.emoji || "😐" }}</span>
+							<i
+								class="emotion-dot"
+								:style="{ background: emotionColor(emotion.emotionId) }"
+							></i>
 							<span class="emotion-name">{{
 								t(emotion.emotionName, emotion.emotionName)
 							}}</span>
@@ -138,21 +147,21 @@
 						</div>
 					</div>
 				</div>
-			</div>
+			</section>
 
 			<!-- Сравнение разнообразия по периодам -->
-			<div class="diversity-compare" v-if="diversitySeries.length">
-				<h2 class="section-title">
+			<section class="block" v-if="diversitySeries.length">
+				<h2 class="block-label">
 					{{ t("analytics.diversityCompare", "Разнообразие по периодам") }}
 				</h2>
-				<div class="chart-placeholder" style="height: 220px">
+				<div class="chart-card" style="height: 220px">
 					<canvas ref="diversityCompareCanvas"></canvas>
 				</div>
-			</div>
+			</section>
 
 			<!-- Инсайты -->
-			<div class="insights-section">
-				<h2 class="section-title">{{ t("analytics.insights", "Инсайты") }}</h2>
+			<section class="block" v-if="insights.length">
+				<h2 class="block-label">{{ t("analytics.insights", "Инсайты") }}</h2>
 				<div class="insights-list">
 					<div
 						v-for="insight in insights"
@@ -166,7 +175,7 @@
 						</div>
 					</div>
 				</div>
-			</div>
+			</section>
 		</div>
 	</div>
 </template>
@@ -179,6 +188,12 @@ import { analyticsService } from "../services/api/AnalyticsService";
 import { useCBTStore } from "../stores/cbt";
 import { useEmotionsStore } from "../stores/emotions";
 Chart.register(...registerables);
+
+// Палитра «вечернего дневника» для графиков
+const LAMP = "#f0b264";
+const LAMP_SOFT = "rgba(240, 178, 100, 0.18)";
+const GRID = "rgba(237, 230, 214, 0.07)";
+const TICK = "#97907e";
 
 // Stores
 const cbtStore = useCBTStore();
@@ -206,11 +221,25 @@ const periodStats = computed(() => {
 	const totalEntries = summary.value?.userStats?.totalEntries || 0;
 	const avgMood = summary.value?.userStats?.avgMoodScore || 0;
 	const topEmotionId = summary.value?.userStats?.mostCommonEmotionId;
-	const topEmotionEmoji = topEmotionId
-		? emotionsStore.getEmotionById(topEmotionId)?.emoji || "😐"
-		: "😐";
-	return { totalEntries, avgMood, topEmotionEmoji };
+	const em = topEmotionId ? emotionsStore.getEmotionById(topEmotionId) : null;
+	const topEmotionName = em
+		? (t(
+				(em as any).nameKey || (em as any).name_key,
+				(em as any).name || ""
+		  ) as string) || "—"
+		: "—";
+	const topEmotionColor = topEmotionId
+		? emotionColor(topEmotionId)
+		: "var(--paper-dim)";
+	return { totalEntries, avgMood, topEmotionName, topEmotionColor };
 });
+
+// Цвет категории конкретной эмоции (для точек вместо смайликов)
+function emotionColor(emotionId: number): string {
+	const em = emotionsStore.getEmotionById(emotionId) as any;
+	if (!em) return "var(--lamp)";
+	return categoryHex(em.categoryId ?? em.category_id, 0, 1);
+}
 
 const emotionsFromSummary = computed(() => {
 	return (summary.value?.emotionAnalytics || []).slice(0, 8);
@@ -290,22 +319,22 @@ function renderLine() {
 				{
 					label: "Записей",
 					data,
-					borderColor:
-						getComputedStyle(document.documentElement).getPropertyValue(
-							"--primary"
-						) || "#4f46e5",
-					tension: 0.25,
+					borderColor: LAMP,
+					backgroundColor: LAMP_SOFT,
+					fill: true,
+					tension: 0.3,
 					pointRadius: 0,
+					borderWidth: 2,
 				},
 			],
 		},
 		options: {
 			plugins: { legend: { display: false } },
 			scales: {
-				x: { grid: { color: "rgba(255,255,255,0.08)" } },
+				x: { grid: { color: GRID }, ticks: { color: TICK } },
 				y: {
-					grid: { color: "rgba(255,255,255,0.08)" },
-					ticks: { precision: 0 },
+					grid: { color: GRID },
+					ticks: { precision: 0, color: TICK },
 				},
 			},
 			maintainAspectRatio: false,
@@ -321,17 +350,26 @@ function renderDoughnut() {
 	const dist = diversity.value?.distribution || [];
 	const labels = dist.map((d: any) => d.categoryName);
 	const data = dist.map((d: any) => d.percentage);
-	const colors = dist.map((_: any, i: number) => colorForIndex(i, dist.length));
+	const colors = dist.map((d: any, i: number) =>
+		categoryHex(d.categoryId, i, dist.length)
+	);
 	if (doughnutChart) doughnutChart.destroy();
 	doughnutChart = new Chart(doughnutCanvas.value.getContext("2d") as any, {
 		type: "doughnut",
 		data: {
 			labels,
-			datasets: [{ data, backgroundColor: colors, borderWidth: 0 }],
+			datasets: [
+				{
+					data,
+					backgroundColor: colors,
+					borderWidth: 2,
+					borderColor: "#161a24",
+				},
+			],
 		},
 		options: {
-			plugins: { legend: { position: "right" } },
-			cutout: "60%",
+			plugins: { legend: { display: false } },
+			cutout: "62%",
 			maintainAspectRatio: false,
 		},
 	});
@@ -382,13 +420,19 @@ function renderDiversityCompare() {
 						backgroundColor: labels.map((_, i) =>
 							colorForIndex(i, labels.length)
 						),
+						borderRadius: 6,
 					},
 				],
 			},
 			options: {
 				plugins: { legend: { display: false } },
 				scales: {
-					y: { beginAtZero: true },
+					x: { grid: { color: GRID }, ticks: { color: TICK } },
+					y: {
+						beginAtZero: true,
+						grid: { color: GRID },
+						ticks: { color: TICK },
+					},
 				},
 				maintainAspectRatio: false,
 			},
@@ -396,9 +440,20 @@ function renderDiversityCompare() {
 	);
 }
 
+// Янтарные оттенки для столбцов сравнения периодов
 function colorForIndex(i: number, n: number): string {
-	const hue = Math.round((360 * i) / Math.max(1, n));
-	return `hsl(${hue}, 70%, 55%)`;
+	const lightness = 68 - (28 * i) / Math.max(1, n - 1 || 1);
+	return `hsl(36, 78%, ${lightness}%)`;
+}
+
+// Реальный цвет категории эмоций (красный гнев, синяя грусть…), fallback — янтарный оттенок
+function categoryHex(
+	categoryId: number,
+	fallbackIndex = 0,
+	total = 1
+): string {
+	const cat = emotionsStore.getCategoryById(categoryId) as any;
+	return cat?.color || colorForIndex(fallbackIndex, total);
 }
 
 // Loaders
@@ -465,203 +520,304 @@ function buildQueryByTab(tab: string): {
 </script>
 
 <style scoped>
-/* Tabs */
-.tabs {
-	display: flex;
-	gap: 8px;
-	margin-bottom: var(--space-4);
-}
-.tab-btn {
-	padding: 6px 10px;
-	border-radius: 8px;
-	border: 1px solid var(--border-color);
-	background: var(--bg-secondary);
-	color: var(--text-primary);
-	font-size: 12px;
-}
-.tab-btn.active {
-	background: var(--primary);
-	border-color: var(--primary);
-	color: white;
-}
-
 .analytics-page {
-	min-height: 100vh;
-	background: var(--bg-secondary);
-	padding-bottom: 80px;
-	transition: background-color var(--transition-base) var(--ease-in-out);
+	padding-bottom: 96px;
 }
 
-.analytics-container {
-	max-width: 500px;
+.analytics-inner {
+	width: 100%;
+	max-width: 440px;
 	margin: 0 auto;
-	padding: var(--space-4);
+	padding: max(6dvh, 36px) 24px 24px;
 }
 
-.section-title {
-	font-size: var(--text-xl);
-	font-weight: var(--font-semibold);
-	color: var(--text-primary);
-	margin-bottom: var(--space-4);
+/* ===== Шапка ===== */
+.analytics-head {
+	margin-bottom: 18px;
+	animation: rise 0.5s ease-out both;
+}
+.analytics-title {
+	font-family: "Spectral", Georgia, serif;
+	font-weight: 500;
+	font-size: clamp(30px, 9vw, 38px);
+	letter-spacing: -0.015em;
+	margin: 0;
 }
 
+/* ===== Период ===== */
+.period-row {
+	display: flex;
+	gap: 7px;
+	margin-bottom: 26px;
+	overflow-x: auto;
+	scrollbar-width: none;
+	animation: rise 0.5s ease-out 0.05s both;
+}
+.period-row::-webkit-scrollbar {
+	display: none;
+}
+.period-chip {
+	flex: 0 0 auto;
+	appearance: none;
+	border: 1px solid var(--line);
+	background: transparent;
+	color: var(--paper-dim);
+	font-family: inherit;
+	font-size: 13.5px;
+	padding: 7px 14px;
+	border-radius: 999px;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.period-chip:hover {
+	color: var(--paper);
+}
+.period-chip.active {
+	color: var(--lamp);
+	border-color: rgba(240, 178, 100, 0.55);
+	background: rgba(240, 178, 100, 0.08);
+}
+
+/* ===== Блоки ===== */
+.block {
+	margin-bottom: 28px;
+	animation: rise 0.5s ease-out 0.1s both;
+}
+.block-label {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--paper-dim);
+	margin: 0 0 12px 2px;
+}
+
+/* ===== Статистика ===== */
 .stats-grid {
 	display: grid;
-	grid-template-columns: repeat(2, 1fr);
-	gap: var(--space-3);
+	grid-template-columns: repeat(3, 1fr);
+	gap: 10px;
 }
 .stat-card {
-	background: var(--bg-secondary);
-	border-radius: var(--radius-base);
-	padding: var(--space-4);
+	background: rgba(26, 31, 43, 0.6);
+	border: 1px solid var(--line);
+	border-radius: 14px;
+	padding: 16px 10px;
 	text-align: center;
-	border: 1px solid var(--border-color);
 }
 .stat-value {
-	font-size: var(--text-3xl);
-	font-weight: var(--font-bold);
-	color: var(--primary);
-	margin-bottom: var(--space-1);
+	font-family: "Spectral", Georgia, serif;
+	font-size: 28px;
+	font-weight: 500;
+	color: var(--lamp);
+	margin-bottom: 4px;
+	line-height: 1.1;
 }
-.stat-label {
-	font-size: var(--text-sm);
-	color: var(--text-secondary);
-}
-
-.chart-placeholder {
-	height: 180px;
+.stat-value.stat-top {
+	font-family: "Spectral", Georgia, serif;
+	font-size: 15px;
+	font-weight: 500;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: var(--bg-secondary);
-	border-radius: var(--radius-base);
-	border: 1px dashed var(--border-color);
+	gap: 7px;
+	min-height: 31px;
+	padding: 0 2px;
+}
+.stat-dot {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+.stat-top-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--paper);
+}
+.stat-label {
+	font-size: 11.5px;
+	color: var(--paper-dim);
 }
 
+/* ===== Карточки графиков ===== */
+.chart-card {
+	background: rgba(26, 31, 43, 0.6);
+	border: 1px solid var(--line);
+	border-radius: 16px;
+	padding: 14px;
+}
+
+/* ===== Метрики разнообразия ===== */
 .diversity-grid {
 	display: grid;
 	grid-template-columns: repeat(2, 1fr);
-	gap: var(--space-3);
-	margin-bottom: var(--space-3);
+	gap: 10px;
+	margin-bottom: 12px;
 }
-.diversity-card,
-.ai-card {
-	background: var(--bg-secondary);
-	border-radius: var(--radius-base);
-	padding: var(--space-4);
-	border: 1px solid var(--border-color);
+.metric-card {
+	background: rgba(26, 31, 43, 0.6);
+	border: 1px solid var(--line);
+	border-radius: 14px;
+	padding: 14px;
 	text-align: center;
 }
 .metric-value {
-	font-size: var(--text-2xl);
-	font-weight: var(--font-bold);
-	color: var(--primary);
+	font-family: "Spectral", Georgia, serif;
+	font-size: 24px;
+	font-weight: 500;
+	color: var(--lamp);
 }
 .metric-label {
-	font-size: var(--text-xs);
-	color: var(--text-secondary);
+	font-size: 11px;
+	color: var(--paper-dim);
+	margin-top: 2px;
 }
 
 .diversity-chart {
 	display: grid;
-	grid-template-columns: auto 1fr;
-	gap: var(--space-4);
+	grid-template-columns: 150px 1fr;
+	gap: 16px;
 	align-items: center;
 }
-.pie {
-	display: block;
+.doughnut-wrap {
+	position: relative;
+	width: 150px;
+	height: 150px;
 }
 .legend {
 	list-style: none;
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: 9px;
 	padding: 0;
 	margin: 0;
 }
 .legend li {
 	display: grid;
-	grid-template-columns: 16px 1fr auto;
+	grid-template-columns: 12px 1fr auto;
 	gap: 8px;
 	align-items: center;
 }
 .legend .swatch {
-	width: 16px;
-	height: 16px;
+	width: 12px;
+	height: 12px;
 	border-radius: 4px;
-	border: 1px solid var(--border-color);
 }
 .legend .name {
-	color: var(--text-primary);
-	font-size: var(--text-sm);
+	color: var(--paper);
+	font-size: 13px;
 }
 .legend .pct {
-	color: var(--text-secondary);
-	font-size: var(--text-sm);
+	color: var(--paper-dim);
+	font-size: 12.5px;
 }
 
-.ai-grid {
-	display: grid;
-	grid-template-columns: repeat(2, 1fr);
-	gap: var(--space-3);
-}
-
+/* ===== Эмоции ===== */
 .emotions-list {
 	display: flex;
 	flex-direction: column;
-	gap: var(--space-3);
+	gap: 10px;
 }
 .emotion-item {
 	display: flex;
 	align-items: center;
-	gap: var(--space-3);
-	padding: var(--space-3);
-	background: var(--bg-secondary);
-	border-radius: var(--radius-base);
-	border: 1px solid var(--border-color);
+	gap: 12px;
+	padding: 12px 14px;
+	background: rgba(26, 31, 43, 0.6);
+	border: 1px solid var(--line);
+	border-radius: 13px;
 }
-.emotion-emoji {
-	font-size: 24px;
-	min-width: 32px;
-	text-align: center;
+.emotion-info {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 120px;
+}
+.emotion-dot {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	flex-shrink: 0;
+	margin: 0 4px;
 }
 .emotion-name {
-	font-weight: var(--font-medium);
-	color: var(--text-primary);
+	font-size: 14px;
+	color: var(--paper);
+}
+.emotion-stats {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	align-items: flex-end;
+}
+.emotion-count {
+	font-size: 12px;
+	color: var(--paper-dim);
 }
 .emotion-bar {
-	width: 120px;
-	height: 6px;
-	background: var(--bg-tertiary);
-	border-radius: var(--radius-full);
+	width: 100%;
+	height: 5px;
+	background: rgba(237, 230, 214, 0.1);
+	border-radius: 999px;
 	overflow: hidden;
 }
 .emotion-bar-fill {
 	height: 100%;
-	background: var(--primary);
+	background: var(--lamp);
+	border-radius: 999px;
 }
 
+/* ===== Инсайты ===== */
 .insights-list {
 	display: flex;
 	flex-direction: column;
-	gap: var(--space-3);
+	gap: 10px;
 }
 .insight-card {
 	display: flex;
-	gap: var(--space-3);
-	background: var(--bg-secondary);
-	border: 1px solid var(--border-color);
-	border-radius: var(--radius-base);
-	padding: var(--space-3);
+	gap: 12px;
+	background: rgba(26, 31, 43, 0.6);
+	border: 1px solid var(--line);
+	border-radius: 14px;
+	padding: 14px;
 }
 .insight-icon {
-	font-size: 20px;
+	font-size: 22px;
+	flex-shrink: 0;
 }
 .insight-title {
-	color: var(--text-primary);
-	font-weight: var(--font-semibold);
+	color: var(--paper);
+	font-weight: 600;
+	font-size: 14.5px;
+	margin: 0 0 3px;
 }
 .insight-text {
-	color: var(--text-secondary);
+	color: var(--paper-dim);
+	font-size: 13.5px;
+	line-height: 1.45;
+	margin: 0;
+}
+
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.analytics-head,
+	.period-row,
+	.block {
+		animation: none;
+	}
 }
 </style> 

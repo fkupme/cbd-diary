@@ -89,6 +89,12 @@ const routes: RouteRecordRaw[] = [
 		},
 	},
 	{
+		path: '/help',
+		name: 'Help',
+		component: () => import('../pages/Help.vue'),
+		meta: { requiresAuth: true, hideTabBar: true },
+	},
+	{
 		path: '/logs',
 		name: 'Logs',
 		component: () => import('../pages/Logs.vue'),

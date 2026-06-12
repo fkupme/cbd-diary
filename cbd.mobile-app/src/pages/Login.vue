@@ -371,12 +371,16 @@ async function handleLogin() {
 		const result = await userStore.login(email.value.trim(), password.value);
 		console.log("✅ Авторизация успешна:", result.user);
 
-		// Проверяем, нужно ли заполнить профиль
-		if (!result.user.profile?.firstName && !result.user.profile?.lastName) {
-			router.push("/profile");
-		} else {
-			router.push("/home");
-		}
+		// Онбординг показываем только если у пользователя ещё нет имени.
+		// Бэк отдаёт плоское `name` (раньше было profile.firstName/lastName) —
+		// проверка по старой форме срабатывала всегда и гнала онбординг каждый вход.
+		const u: any = result.user;
+		const hasName = !!(
+			u?.name?.trim() ||
+			u?.profile?.firstName ||
+			u?.profile?.lastName
+		);
+		router.push(hasName ? "/home" : "/profile");
 	} catch (error: any) {
 		console.error("❌ Ошибка авторизации:", error);
 

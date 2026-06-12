@@ -41,8 +41,8 @@ export function useAuth() {
 				isAuthenticated.value = true;
 				currentUser.value = result.data.user;
 
-				// Получаем полный профиль пользователя
-				await loadCurrentUser();
+				// Загружаем полный профиль в фоне — не блокируем логин
+				loadCurrentUser().catch(console.warn);
 
 				// Локальная (SQLite) сессия: логиним того же пользователя по email в Tauri
 				try {
@@ -64,54 +64,51 @@ export function useAuth() {
 					);
 				}
 
-				// После авторизации: если онлайн — синкаем каталог эмоций с сервера
-				// в SQLite. Сервер — источник истины: каталог пересобирается с
-				// СЕРВЕРНЫМИ id, ссылки в существующих записях ремапятся (Rust).
-				try {
-					const online = navigator.onLine;
-					if (online) {
-						console.log('🔁 Синк каталога эмоций после логина...');
-						const full = await emotionsService.getFullEmotionsStructure();
+				// После авторизации: синкаем каталог эмоций в фоне — не блокируем логин
+				if (navigator.onLine) {
+					Promise.resolve().then(async () => {
+						try {
+							console.log('🔁 Синк каталога эмоций после логина (фон)...');
+							const full = await emotionsService.getFullEmotionsStructure();
 
-						const categoriesPayload = full.categories
-							.filter(c => c.id && c.nameKey)
-							.map(c => ({
-								id: c.id,
-								name_key: c.nameKey,
-								color: c.color ?? null,
-								icon: c.icon ?? null,
-								sort_order: c.sortOrder ?? 0,
-								is_active: c.isActive ?? true,
-							}));
+							const categoriesPayload = full.categories
+								.filter(c => c.id && c.nameKey)
+								.map(c => ({
+									id: c.id,
+									name_key: c.nameKey,
+									color: c.color ?? null,
+									icon: c.icon ?? null,
+									sort_order: c.sortOrder ?? 0,
+									is_active: c.isActive ?? true,
+								}));
 
-						const emotionsPayload = full.emotions
-							.filter(e => e.id && e.nameKey)
-							.map(e => ({
-								id: e.id,
-								category_id: e.categoryId ?? null,
-								category_external_key: e.category?.nameKey ?? undefined,
-								name_key: e.nameKey,
-								emoji: e.emoji,
-								intensity_default: e.intensityDefault ?? 5,
-								synonyms: Array.isArray(e.synonyms)
-									? e.synonyms.filter(s => typeof s === 'string')
-									: [],
-								opposite_emotion_id: e.oppositeEmotionId ?? undefined,
-								sort_order: e.sortOrder ?? 0,
-								is_active: e.isActive ?? true,
-								server_updated_at: new Date().toISOString(),
-							}));
+							const emotionsPayload = full.emotions
+								.filter(e => e.id && e.nameKey)
+								.map(e => ({
+									id: e.id,
+									category_id: e.categoryId ?? null,
+									category_external_key: e.category?.nameKey ?? undefined,
+									name_key: e.nameKey,
+									emoji: e.emoji,
+									intensity_default: e.intensityDefault ?? 5,
+									synonyms: Array.isArray(e.synonyms)
+										? e.synonyms.filter(s => typeof s === 'string')
+										: [],
+									opposite_emotion_id: e.oppositeEmotionId ?? undefined,
+									sort_order: e.sortOrder ?? 0,
+									is_active: e.isActive ?? true,
+									server_updated_at: new Date().toISOString(),
+								}));
 
-						const upserted = await invoke<number>('sync_emotions_from_server', {
-							emotions: emotionsPayload,
-							categories: categoriesPayload,
-						});
-						console.log(`✅ Каталог эмоций синкнут в SQLite: ${upserted}`);
-					} else {
-						console.log('⚠️ Оффлайн, пропускаем синк эмоций');
-					}
-				} catch (syncErr) {
-					console.warn('⚠️ Ошибка синка эмоций после логина:', syncErr);
+							const upserted = await invoke<number>('sync_emotions_from_server', {
+								emotions: emotionsPayload,
+								categories: categoriesPayload,
+							});
+							console.log(`✅ Каталог эмоций синкнут в SQLite: ${upserted}`);
+						} catch (syncErr) {
+							console.warn('⚠️ Ошибка синка эмоций после логина:', syncErr);
+						}
+					});
 				}
 
 				return result.data;

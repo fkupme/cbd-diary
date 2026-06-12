@@ -39,12 +39,10 @@ export class AuthService {
 			);
 
 			if (response.success && response.data?.accessToken) {
-				// Сохраняем токены в API клиенте
 				await apiClient.setTokens(
 					response.data.accessToken,
 					response.data.refreshToken
 				);
-
 				console.log('✅ Авторизация успешна, токены сохранены');
 			}
 

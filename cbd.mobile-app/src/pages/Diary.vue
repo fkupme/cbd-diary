@@ -383,8 +383,13 @@ function getEntryEmotions(entry: any): Array<{ id: number; name: string }> {
 			const em = emotionsStore.getEmotionById(
 				(emotion as any).emotionId || (emotion as any).emotion_id
 			);
+			// Каталог эмоций приходит в camelCase (nameKey); раньше читали snake
+			// `name_key` → ключ для t() был undefined → на экране оставался сырой ключ.
 			const emotionName = em
-				? (t((em as any).name_key, (em as any).name || "") as string)
+				? (t(
+						(em as any).nameKey || (em as any).name_key,
+						(em as any).name || ""
+				  ) as string)
 				: "";
 			const emotionId =
 				(emotion as any).emotionId || (emotion as any).emotion_id;
@@ -420,7 +425,10 @@ function getEntryData(entry: any) {
 				(emotion as any).emotionId || (emotion as any).emotion_id;
 			const em = emotionsStore.getEmotionById(emotionId);
 			const name = em
-				? (t((em as any).name_key, (em as any).name || "") as string)
+				? (t(
+						(em as any).nameKey || (em as any).name_key,
+						(em as any).name || ""
+				  ) as string)
 				: "";
 			return {
 				name,

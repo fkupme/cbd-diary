@@ -54,8 +54,11 @@ export const useI18nStore = defineStore('i18n', () => {
 		isLoading.value = true;
 		error.value = null;
 
+		// 1) Тянем пачки переводов с сервера (категории + эмоции) — best-effort.
+		//    Падение сети/сервера НЕ должно обнулять уже закэшированные переводы:
+		//    раньше исключение тут не давало дойти до шага 2, и на экране оставались
+		//    сырые ключи вроде `emotion.joy.blagodarnost`.
 		try {
-			// 1) Тянем пачки переводов с сервера (категории + эмоции) для всех языков
 			const bundles = await emotionsService.getEmotionI18nBundles();
 			const langs = Object.keys(bundles);
 			for (const lang of langs) {
@@ -68,8 +71,16 @@ export const useI18nStore = defineStore('i18n', () => {
 					});
 				}
 			}
+		} catch (err: any) {
+			console.warn(
+				'i18n: не удалось обновить переводы с сервера, работаем на локальном кэше',
+				err
+			);
+		}
 
-			// 2) Гидрируем кэш для текущего языка из локальной БД
+		// 2) Всегда гидрируем кэш для текущего языка из локальной БД (даже если
+		//    шаг 1 упал — используем то, что уже синкнуто ранее).
+		try {
 			const fromDb = await invoke<Array<[string, string]>>(
 				'get_translations_for_language',
 				{ languageCode }
@@ -78,10 +89,12 @@ export const useI18nStore = defineStore('i18n', () => {
 			for (const [k, v] of fromDb) {
 				map[k] = v;
 			}
-			customTranslations.value = map;
+			if (Object.keys(map).length > 0) {
+				customTranslations.value = map;
+			}
 		} catch (err: any) {
 			error.value = String(err);
-			console.error('Ошибка загрузки переводов:', err);
+			console.error('Ошибка гидратации переводов из локальной БД:', err);
 		} finally {
 			isLoading.value = false;
 		}

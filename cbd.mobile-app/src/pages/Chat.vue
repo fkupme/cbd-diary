@@ -1,24 +1,22 @@
 <template>
-	<div class="chat-page">
-		<div class="chat-header">
-			<q-btn
-				class="back-btn"
-				@click="$router.go(-1)"
-				round
-				flat
-				icon="arrow_back"
-			/>
-			<h1 class="page-title">Чат</h1>
-			<div class="header-spacer"></div>
-		</div>
+	<div class="chat-page diary-theme" ref="chatPageRef">
+		<header class="chat-header">
+			<button class="icon-btn" @click="$router.go(-1)" aria-label="Назад">
+				<q-icon name="arrow_back" />
+			</button>
+			<h1 class="chat-title">Разбор</h1>
+			<span class="header-spacer"></span>
+		</header>
 		<div v-if="loading" class="chat-loading">Загрузка…</div>
 		<div v-else class="chat-container">
 			<div class="messages" ref="messagesRef">
 				<div
 					v-if="awaitingFirst && messages.length === 0"
-					class="q-pa-md flex items-center justify-center"
+					class="thinking"
 				>
-					<q-spinner-pie color="primary" size="32px" />
+					<span class="thinking-dot"></span>
+					<span class="thinking-dot"></span>
+					<span class="thinking-dot"></span>
 				</div>
 				<q-chat-message
 					v-for="m in messages"
@@ -27,31 +25,29 @@
 					:sent="m.role === 'USER'"
 					:text="[getText(m)]"
 					:stamp="formatTime(m.createdAt)"
-					:bg-color="
-						m.role === 'USER'
-							? 'primary'
-							: m.role === 'AI'
-							? 'grey-3'
-							: 'grey-2'
-					"
-					:text-color="m.role === 'USER' ? 'white' : 'black'"
+					:class="m.role === 'USER' ? 'msg-user' : 'msg-ai'"
 				/>
 			</div>
 			<div class="composer">
-				<CbdInput
-					v-model="input"
-					class="input"
-					type="text"
-					:placeholder="'Напишите сообщение…'"
-					@keyup.enter="send"
-				/>
-				<CbdButton
-					class="send-btn"
+				<div class="composer-field">
+					<textarea
+						ref="inputRef"
+						v-model="input"
+						class="composer-input"
+						rows="1"
+						placeholder="Напишите сообщение…"
+						@input="autosize"
+						@keydown.enter.exact.prevent="send"
+					></textarea>
+				</div>
+				<button
+					class="send-lamp"
 					:disabled="!input.trim() || sending"
 					@click="send"
+					aria-label="Отправить"
 				>
 					<q-icon name="send" />
-				</CbdButton>
+				</button>
 			</div>
 		</div>
 	</div>
@@ -60,7 +56,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { CbdButton, CbdInput } from "../components/ui";
 import { chatService } from "../services/api";
 import type { Chat, ChatMessage } from "../services/api/types";
 import { socketService } from "../services/SocketService";
@@ -75,6 +70,38 @@ const sending = ref(false);
 const awaitingFirst = ref(true);
 const aiRequested = ref(false);
 const messagesRef = ref<HTMLDivElement | null>(null);
+const chatPageRef = ref<HTMLDivElement | null>(null);
+const inputRef = ref<HTMLTextAreaElement | null>(null);
+
+// Авто-рост textarea под текст (до max-height из CSS)
+function autosize() {
+	const el = inputRef.value;
+	if (!el) return;
+	el.style.height = "auto";
+	el.style.height = `${el.scrollHeight}px`;
+}
+
+// Клавиатура: получаем её реальную высоту и поднимаем композитор ровно на неё
+// через padding-bottom (страница остаётся на всю высоту — без белого зазора).
+// Основной путь — VirtualKeyboard API (env(keyboard-inset-height) в CSS),
+// фолбэк — visualViewport (считаем высоту клавы и пишем в --kb).
+function setKbInset(px: number) {
+	const page = chatPageRef.value;
+	if (page) page.style.setProperty("--kb", `${Math.max(0, Math.round(px))}px`);
+	scrollToBottom();
+}
+
+function onVisualViewport() {
+	const vv = window.visualViewport;
+	if (!vv) return;
+	// высота клавиатуры = сколько «съедено» снизу от внутренней высоты окна
+	setKbInset(window.innerHeight - vv.height - vv.offsetTop);
+}
+
+function onKeyboardGeometry() {
+	const vk: any = (navigator as any).virtualKeyboard;
+	setKbInset(vk?.boundingRect?.height || 0);
+}
 
 function scrollToBottom() {
 	nextTick(() => {
@@ -181,6 +208,10 @@ async function send() {
 		);
 		upsertMessage(msg);
 		input.value = "";
+		// сбрасываем высоту textarea обратно к одной строке
+		nextTick(() => {
+			if (inputRef.value) inputRef.value.style.height = "auto";
+		});
 		if (!aiRequested.value) {
 			console.log("[CHAT] auto ai_generate after user msg");
 			startAi(chat.value.id);
@@ -366,6 +397,19 @@ onMounted(async () => {
 	} finally {
 		loading.value = false;
 	}
+
+	// Клавиатура: подписываемся на ОБА источника — что сработает на этом вебвью,
+	// то и обновит --kb (значения совпадают: оба = высота клавиатуры).
+	const vk: any = (navigator as any).virtualKeyboard;
+	if (vk) {
+		vk.overlaysContent = true; // клавиатура перекрывает контент, а не ресайзит
+		vk.addEventListener("geometrychange", onKeyboardGeometry);
+	}
+	if (window.visualViewport) {
+		window.visualViewport.addEventListener("resize", onVisualViewport);
+		window.visualViewport.addEventListener("scroll", onVisualViewport);
+		onVisualViewport();
+	}
 });
 
 const cleanup = ref<null | (() => void)>(null);
@@ -374,6 +418,15 @@ onUnmounted(() => {
 	console.log("[CHAT] unmounted");
 	clearFallback();
 	cleanup.value?.();
+	const vk: any = (navigator as any).virtualKeyboard;
+	if (vk) {
+		vk.overlaysContent = false;
+		vk.removeEventListener("geometrychange", onKeyboardGeometry);
+	}
+	if (window.visualViewport) {
+		window.visualViewport.removeEventListener("resize", onVisualViewport);
+		window.visualViewport.removeEventListener("scroll", onVisualViewport);
+	}
 });
 
 watch(
@@ -398,68 +451,218 @@ watch(
 </script>
 
 <style scoped>
-/* Оставляем базовые стили контейнеров; QChatMessage сам рендерит пузырьки */
 .chat-page {
-	min-height: 100dvh;
 	height: 100dvh;
-	background: var(--bg-secondary);
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
+	box-sizing: border-box;
+	/* Поднимаем весь столбец (и композитор) над клавиатурой на её реальную
+	   высоту. --kb пишет JS из VirtualKeyboard API (boundingRect) или из
+	   visualViewport — единый источник, без капризов env()-фолбэка. Страница
+	   остаётся на всю высоту, поэтому белого зазора снизу нет. */
+	padding-bottom: var(--kb, 0px);
+	transition: padding-bottom 0.18s ease-out;
 }
+
+/* ===== Шапка ===== */
 .chat-header {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	padding: 12px 16px;
+	padding: 14px 16px;
+	border-bottom: 1px solid var(--line);
+	flex-shrink: 0;
 }
-.page-title {
+.icon-btn {
+	width: 38px;
+	height: 38px;
+	display: grid;
+	place-items: center;
+	border: none;
+	background: rgba(237, 230, 214, 0.06);
+	color: var(--paper);
+	border-radius: 50%;
+	cursor: pointer;
+	transition: background 0.18s ease;
+}
+.icon-btn:hover {
+	background: rgba(240, 178, 100, 0.12);
+	color: var(--lamp);
+}
+.icon-btn .q-icon {
+	font-size: 21px;
+}
+.chat-title {
 	flex: 1;
 	text-align: center;
 	margin: 0;
+	font-family: "Spectral", Georgia, serif;
+	font-weight: 500;
+	font-size: 20px;
+	letter-spacing: -0.01em;
 }
 .header-spacer {
-	width: 24px;
+	width: 38px;
+	flex-shrink: 0;
 }
+
+.chat-loading {
+	padding: 24px;
+	text-align: center;
+	color: var(--paper-dim);
+}
+
 .chat-container {
+	flex: 1;
 	display: flex;
 	flex-direction: column;
-	height: calc(100dvh - 110px);
-	max-height: calc(100dvh - 110px);
-	padding-bottom: 110px;
+	min-height: 0;
 }
 .messages {
 	flex: 1;
 	overflow-y: auto;
-	padding: 12px;
+	padding: 16px 14px;
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: 4px;
 }
+
+/* ===== «Печатает…» ===== */
+.thinking {
+	display: flex;
+	gap: 6px;
+	padding: 14px 4px;
+	align-self: flex-start;
+}
+.thinking-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--lamp);
+	opacity: 0.5;
+	animation: thinking 1.2s ease-in-out infinite;
+}
+.thinking-dot:nth-child(2) {
+	animation-delay: 0.2s;
+}
+.thinking-dot:nth-child(3) {
+	animation-delay: 0.4s;
+}
+@keyframes thinking {
+	0%,
+	60%,
+	100% {
+		opacity: 0.35;
+		transform: translateY(0);
+	}
+	30% {
+		opacity: 1;
+		transform: translateY(-3px);
+	}
+}
+
+/* ===== Пузырьки Quasar в «чернильной» теме ===== */
+:deep(.q-message-name) {
+	color: var(--paper-dim);
+	font-size: 12px;
+}
+:deep(.q-message-stamp) {
+	color: rgba(151, 144, 126, 0.7);
+}
+:deep(.q-message-text) {
+	color: var(--paper);
+	min-height: unset;
+}
+:deep(.q-message-text--received .q-message-text-content) {
+	color: var(--paper);
+}
+/* AI / система — тёмная «бумага» */
+:deep(.msg-ai .q-message-text) {
+	background: rgba(26, 31, 43, 0.85);
+	border: 1px solid var(--line);
+	color: var(--paper);
+}
+:deep(.msg-ai .q-message-text:last-child:before) {
+	border-color: transparent rgba(26, 31, 43, 0.85);
+}
+/* Пользователь — янтарь */
+:deep(.msg-user .q-message-text) {
+	background: var(--lamp);
+	color: #181203;
+}
+:deep(.msg-user .q-message-text:last-child:before) {
+	border-color: transparent var(--lamp);
+}
+
+/* ===== Композитор ===== */
 .composer {
 	display: flex;
-	gap: 8px;
-	background: var(--bg-primary);
-	position: fixed;
-	bottom: 0;
-	left: 0;
-	right: 0;
-	height: 70px;
-	padding: 10px 12px;
+	align-items: flex-end;
+	gap: 10px;
+	padding: 12px 14px calc(14px + env(safe-area-inset-bottom));
+	background: rgba(18, 21, 29, 0.92);
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
+	border-top: 1px solid var(--line);
+	flex-shrink: 0;
 }
-.input {
+.composer-field {
 	flex: 1;
-	padding-bottom: 40px;
+	display: flex;
+	align-items: center;
+	background: rgba(26, 31, 43, 0.7);
+	border: 1px solid var(--line);
+	border-radius: 22px;
+	padding: 0 16px;
+	transition: border-color 0.2s ease;
 }
-.send-btn {
+.composer-field:focus-within {
+	border-color: rgba(240, 178, 100, 0.55);
+}
+.composer-input {
+	flex: 1;
+	min-width: 0;
+	background: transparent;
 	border: none;
-	background: var(--primary);
-	color: var(--text-inverse);
-	border-radius: 20px;
-	padding: 0 14px;
-	padding-bottom: 40px;
+	outline: none;
+	color: var(--paper);
+	font-family: inherit;
+	font-size: 15px;
+	line-height: 1.4;
+	padding: 11px 0;
+	margin: 0;
+	resize: none;
+	max-height: 120px;
+	overflow-y: auto;
+	caret-color: var(--lamp);
 }
-.chat-loading {
-	padding: 16px;
+.composer-input::placeholder {
+	color: rgba(151, 144, 126, 0.6);
+}
+.send-lamp {
+	width: 44px;
+	height: 44px;
+	flex-shrink: 0;
+	display: grid;
+	place-items: center;
+	border: none;
+	border-radius: 50%;
+	cursor: pointer;
+	color: #181203;
+	background: var(--lamp);
+	box-shadow: 0 8px 22px -8px rgba(240, 178, 100, 0.6);
+	transition: transform 0.12s ease, opacity 0.2s ease, background 0.2s ease;
+}
+.send-lamp .q-icon {
+	font-size: 20px;
+}
+.send-lamp:active {
+	transform: scale(0.92);
+}
+.send-lamp:disabled {
+	opacity: 0.4;
+	box-shadow: none;
+	cursor: not-allowed;
 }
 </style>

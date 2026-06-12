@@ -1,20 +1,18 @@
 <template>
-	<q-app>
-		<q-layout view="lHh Lpr lFf">
-			<q-page-container>
-				<router-view />
-			</q-page-container>
+	<q-layout view="lHh Lpr lFf">
+		<q-page-container>
+			<router-view />
+		</q-page-container>
 
-			<CbdTabBar
-				v-if="showTabBar"
-				:tabs="tabs"
-				:model-value="activeTab"
-				@tab-change="handleTabChange"
-				@add-click="handleAddClick"
-				@update:model-value="activeTab = $event"
-			/>
-		</q-layout>
-	</q-app>
+		<CbdTabBar
+			v-if="showTabBar"
+			:tabs="tabs"
+			:model-value="activeTab"
+			@tab-change="handleTabChange"
+			@add-click="handleAddClick"
+			@update:model-value="activeTab = $event"
+		/>
+	</q-layout>
 </template>
 
 <script setup lang="ts">
@@ -78,7 +76,7 @@ onUnmounted(() => {
 const tabs: Tab[] = [
 	{ name: "home", icon: "home" },
 	{ name: "diary", icon: "book" },
-	{ name: "analytics", icon: "analytics", disabled: true },
+	{ name: "analytics", icon: "analytics" },
 	{ name: "settings", icon: "settings" },
 ];
 
@@ -141,8 +139,9 @@ function handleTabChange(tab: Tab) {
 }
 
 function handleAddClick() {
-	// Голосовой захват — основной путь создания события (СМЭР-разбор)
-	router.push("/capture");
+	// Кнопка «+» в таб-баре открывает форму создания события напрямую.
+	// Голосовой захват остаётся главным сценарием на домашней (орб → /capture).
+	router.push("/add-entry");
 }
 
 // Проверяем настройки темы при загрузке приложения

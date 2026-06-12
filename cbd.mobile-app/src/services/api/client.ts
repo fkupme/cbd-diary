@@ -106,25 +106,24 @@ export class ApiClient {
 		accessToken: string,
 		refreshToken: string
 	): Promise<void> {
-		try {
-			this.authToken = accessToken;
-			this.refreshToken = refreshToken;
+		this.authToken = accessToken;
+		this.refreshToken = refreshToken;
 
-			await this.secureStorage.storeAPITokens({
-				access: accessToken,
-				refresh: refreshToken,
-			});
+		// Сразу устанавливаем заголовок — не ждём сохранения в storage
+		this.httpService.setDefaultHeaders({
+			...API_CONFIG.HEADERS,
+			Authorization: `Bearer ${accessToken}`,
+		});
 
-			this.httpService.setDefaultHeaders({
-				...API_CONFIG.HEADERS,
-				Authorization: `Bearer ${accessToken}`,
-			});
-
+		// Сохранение в хранилище — в фоне, не блокируем логин
+		this.secureStorage.storeAPITokens({
+			access: accessToken,
+			refresh: refreshToken,
+		}).then(() => {
 			console.log('🔐 Токены сохранены');
-		} catch (error) {
-			console.error('❌ Ошибка сохранения токенов:', error);
-			throw error;
-		}
+		}).catch(e => {
+			console.warn('⚠️ Не удалось сохранить токены в storage:', e);
+		});
 	}
 
 	/**
