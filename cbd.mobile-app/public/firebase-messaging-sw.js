@@ -34,15 +34,11 @@ self.addEventListener('activate', event => {
 	event.waitUntil(self.clients.claim());
 });
 
-// Chromium-эвристики установки ждут наличие fetch-обработчика на SW. Но в
-// кросс-ориджин (API на api.*) НЕ вмешиваемся и не-GET не трогаем — иначе
-// ломаем/зашумляем запросы приложения к бэкенду.
-self.addEventListener('fetch', event => {
-	if (event.request.method !== 'GET') return;
-	const url = new URL(event.request.url);
-	if (url.origin !== self.location.origin) return;
-	event.respondWith(fetch(event.request));
-});
+// Пассивный fetch-обработчик: его НАЛИЧИЕ нужно для install-эвристик Chromium,
+// но мы НИЧЕГО не перехватываем (никаких respondWith) — браузер обрабатывает все
+// запросы сам. Любой respondWith(fetch(...)) ломал SPA-навигации и кросс-ориджин
+// к API, поэтому не вмешиваемся вовсе.
+self.addEventListener('fetch', () => {});
 
 // Инициализируем messaging только если конфиг реально передан.
 if (firebaseConfig.apiKey && firebaseConfig.projectId) {
