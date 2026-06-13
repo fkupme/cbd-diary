@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Put, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Req,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -10,6 +18,7 @@ import { Request } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { createApiResponse } from '../../common/helpers/response.helper';
 import { ApiResponse } from '../../common/types/api-response.type';
+import { PrismaService } from '../../database/prisma.service';
 import {
   ConflictResolutionDto,
   SyncRequestDto,
@@ -22,7 +31,10 @@ import { SyncService } from './sync.service';
 @ApiBearerAuth('JWT-auth')
 @Controller('sync')
 export class SyncController {
-  constructor(private readonly syncService: SyncService) {}
+  constructor(
+    private readonly syncService: SyncService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   private extractUserId(req: Request): string {
     const user: any = (req as any).user;
@@ -242,11 +254,23 @@ export class SyncController {
   async healthCheck(
     @Req() req: Request,
   ): Promise<
-    ApiResponse<{ status: string; timestamp: Date; version: string }>
+    ApiResponse<{ status: string; db: string; timestamp: Date; version: string }>
   > {
+    // Реальный пинг БД: если базы/коннекта нет — отдаём 503, чтобы Docker
+    // healthcheck и мониторинг видели проблему (а не «healthy» при мёртвой БД).
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+    } catch (e: any) {
+      throw new ServiceUnavailableException({
+        status: 'unhealthy',
+        db: 'down',
+        error: String(e?.message || e).slice(0, 200),
+      });
+    }
     return createApiResponse(
       {
         status: 'healthy',
+        db: 'up',
         timestamp: new Date(),
         version: '1.0.0',
       },

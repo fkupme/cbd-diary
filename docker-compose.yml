@@ -8,9 +8,14 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-cbd_diary_dev}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password}
-      POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-trust}
+      # БЕЗОПАСНОСТЬ: НИКОГДА не trust — это коннект суперюзером без пароля.
+      # Прод был снесён ботом-вымогателем именно из-за trust + публичного порта.
+      POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-scram-sha-256}
     ports:
-      - '${POSTGRES_HOST_PORT:-5432}:5432'
+      # ТОЛЬКО localhost: БД не должна торчать в интернет. API ходит к ней по
+      # внутренней docker-сети (host `postgres`), хостовый порт нужен лишь для
+      # локальных инструментов (DBeaver) на самой машине.
+      - '127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./cbd.web-api/docker/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -28,7 +33,8 @@ services:
     container_name: cbd-redis-dev
     restart: unless-stopped
     ports:
-      - '${REDIS_HOST_PORT:-6379}:6379'
+      # ТОЛЬКО localhost: открытый Redis = RCE-вектор. API ходит по docker-сети.
+      - '127.0.0.1:${REDIS_HOST_PORT:-6379}:6379'
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes

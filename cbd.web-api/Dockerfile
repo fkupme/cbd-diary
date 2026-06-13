@@ -34,6 +34,11 @@ COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nestjs:nodejs /app/package*.json ./
+# tsconfig нужен ts-node'у для сид-скрипта (prisma/seed.ts) при старте
+COPY --from=builder --chown=nestjs:nodejs /app/tsconfig.json ./
+# Self-provision entrypoint: db push + seed-if-empty перед стартом приложения
+COPY --from=builder --chown=nestjs:nodejs /app/docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
 
 # Устанавливаем права доступа
 USER nestjs
@@ -42,10 +47,12 @@ USER nestjs
 EXPOSE 3000
 ENV NODE_ENV=production
 
-# Проверка здоровья
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node --version || exit 1
+# Проверка здоровья: реальный пинг API (эндпоинт делает SELECT 1 к БД),
+# а не `node --version` — иначе контейнер «healthy» при мёртвой базе.
+# start-period 40s даёт время на db push + seed при первом старте.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://127.0.0.1:3002/api/v1/sync/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-# Запуск приложения (миграции выполняются через docker-compose командой)
-ENTRYPOINT ["dumb-init", "--"]
+# Запуск: dumb-init → entrypoint (db push + seed-if-empty) → node dist/main
+ENTRYPOINT ["dumb-init", "--", "./docker-entrypoint.sh"]
 CMD ["node", "dist/main"] 
