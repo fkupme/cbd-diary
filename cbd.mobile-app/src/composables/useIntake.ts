@@ -142,11 +142,11 @@ export function useIntake() {
 		}
 	}
 
-	async function commit() {
+	async function commit(selectedEventIds?: string[]) {
 		if (!sessionId.value) return;
 		busy.value = true;
 		try {
-			await intakeService.commit(sessionId.value);
+			await intakeService.commit(sessionId.value, selectedEventIds);
 			await refresh();
 		} catch (e: any) {
 			error.value = e?.message || 'Не удалось сохранить';

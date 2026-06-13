@@ -116,9 +116,7 @@ export class IntakeController {
     @Body()
     body: {
       text?: string;
-      emotionIds?: number[];
-      intensity?: number;
-      skip?: boolean;
+      emotions?: { emotionId: number; intensity: number }[];
     },
   ) {
     const userId = this.extractUserId(req);
@@ -127,11 +125,15 @@ export class IntakeController {
   }
 
   @Post('sessions/:id/commit')
-  @ApiOperation({ summary: 'Сохранить готовые ситуации как записи дневника' })
+  @ApiOperation({ summary: 'Сохранить выбранные ситуации как записи дневника' })
   @ApiParam({ name: 'id', description: 'ID сессии' })
-  async commit(@Req() req: Request, @Param('id') id: string) {
+  async commit(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() body: { selectedEventIds?: string[] },
+  ) {
     const userId = this.extractUserId(req);
-    const data = await this.intake.commit(userId, id);
+    const data = await this.intake.commit(userId, id, body?.selectedEventIds);
     return createApiResponse(data, req.url);
   }
 }

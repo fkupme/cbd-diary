@@ -20,7 +20,8 @@ import {
 type IntakeRole = 'USER' | 'AI' | 'SYSTEM';
 
 // Поля интервью идут строго в этом порядке по каждому событию.
-export type Field = 'thought' | 'emotions' | 'intensity' | 'reactions';
+// Интенсивность теперь часть эмоций (на каждую свою), отдельного шага нет.
+export type Field = 'thought' | 'emotions' | 'reactions';
 
 export interface Cursor {
   eventId: string;
@@ -29,25 +30,22 @@ export interface Cursor {
 
 interface AnswerPayload {
   text?: string;
-  emotionIds?: number[];
-  intensity?: number;
-  skip?: boolean;
+  emotions?: { emotionId: number; intensity: number }[];
 }
 
-// Эмоция в черновике — канонический camelCase ({emotionId,intensity}),
-// как в cbt_entries.thoughts и CreateCbtEntryDto.
+// Эмоция в черновике — snake_case, как ждёт CreateCbtEntryDto (emotion_id).
 export interface DraftEmotion {
-  emotionId: number;
+  emotion_id: number;
   intensity: number;
 }
 
 // Мысль в черновике — форма ThoughtChainDto из cbt-entry.dto.ts.
 export interface DraftThought {
   thought: string;
-  isAutomatic?: boolean;
+  is_automatic?: boolean;
   intensity?: number;
   emotions: DraftEmotion[];
-  cognitiveDistortions?: { type: string; note?: string }[];
+  cognitive_distortions?: { type: string; note?: string }[];
 }
 
 // Черновик будущей записи — ровно CreateCbtEntryDto, чтобы на commit уйти как есть.
@@ -182,11 +180,9 @@ export class IntakeService {
     );
     const situations = this.parseSituations(raw);
     if (situations.length === 0) {
-      // Модель ничего не выделила — трактуем весь транскрипт как одну ситуацию.
       situations.push({ title: transcript.slice(0, 80) });
     }
 
-    // Идемпотентность повторной сегментации.
     await this.prisma.intakeEvent.deleteMany({ where: { sessionId } });
     await this.prisma.intakeMessage.deleteMany({
       where: { sessionId, kind: 'buttons' },
@@ -263,7 +259,6 @@ export class IntakeService {
       return { selected: [], messages: [msg] };
     }
 
-    // Стартуем интервью с первой выбранной ситуации.
     const first = chosen[0];
     await this.prisma.intakeEvent.update({
       where: { id: first.id },
@@ -298,8 +293,7 @@ export class IntakeService {
 
     const out: any[] = [];
 
-    // 1) сохраняем ход пользователя (человекочитаемо) для перезагрузки ленты.
-    const userText = await this.renderUserAnswer(cursor.field, payload);
+    const userText = this.renderUserAnswer(cursor.field, payload);
     if (userText !== null) {
       out.push(await this.addMessage(sessionId, 'USER', 'text', userText));
     }
@@ -313,10 +307,10 @@ export class IntakeService {
         draft.thoughts = [
           {
             thought: t,
-            isAutomatic: true,
+            is_automatic: true,
             intensity: 5,
             emotions: [],
-            cognitiveDistortions: [],
+            cognitive_distortions: [],
           },
         ];
         nextCursor = { eventId: event.id, field: 'emotions' };
@@ -326,50 +320,27 @@ export class IntakeService {
 
       case 'emotions': {
         this.ensureThought(draft);
-        if (Array.isArray(payload.emotionIds)) {
-          // Подтверждённый выбор чипов/колеса.
-          const ids = await this.sanitizeIds(payload.emotionIds);
-          const intensity = draft.thoughts[0].intensity || 5;
-          draft.thoughts[0].emotions = ids.map((id) => ({
-            emotionId: id,
-            intensity,
-          }));
-          if (ids.length === 0) {
-            // Нет эмоций — интенсивность спрашивать не о чем.
-            nextCursor = { eventId: event.id, field: 'reactions' };
-            out.push(await this.emitQuestion(sessionId, 'reactions', event));
-          } else {
-            nextCursor = { eventId: event.id, field: 'intensity' };
-            out.push(await this.emitQuestion(sessionId, 'intensity', event));
-          }
+        if (Array.isArray(payload.emotions)) {
+          // Подтверждённый выбор (чипы/колесо) — у каждой эмоции своя интенсивность.
+          const list = await this.sanitizeEmotions(payload.emotions);
+          draft.thoughts[0].emotions = list;
+          draft.thoughts[0].intensity = list.length
+            ? Math.max(...list.map((e) => e.intensity))
+            : 5;
+          nextCursor = { eventId: event.id, field: 'reactions' };
+          out.push(await this.emitQuestion(sessionId, 'reactions', event));
         } else {
-          // Свободный текст — маппим в id и предлагаем чипы (остаёмся на поле).
-          const ids = await this.mapEmotions((payload.text || '').trim());
-          draft.thoughts[0].emotions = ids.map((id) => ({
-            emotionId: id,
-            intensity: 5,
-          }));
-          out.push(await this.emitEmotionChips(sessionId, event, ids));
-          nextCursor = cursor;
+          // Свободный текст → маппим в эмоции с интенсивностью, предлагаем чипы.
+          const list = await this.mapEmotions((payload.text || '').trim());
+          draft.thoughts[0].emotions = list;
+          out.push(await this.emitEmotionChips(sessionId, event, list));
+          nextCursor = cursor; // остаёмся на эмоциях до подтверждения
         }
         break;
       }
 
-      case 'intensity': {
-        this.ensureThought(draft);
-        const n = this.clampIntensity(payload.intensity);
-        draft.thoughts[0].intensity = n;
-        draft.thoughts[0].emotions = (draft.thoughts[0].emotions || []).map(
-          (e) => ({ ...e, intensity: n }),
-        );
-        nextCursor = { eventId: event.id, field: 'reactions' };
-        out.push(await this.emitQuestion(sessionId, 'reactions', event));
-        break;
-      }
-
       case 'reactions': {
-        draft.reactions = payload.skip ? '' : (payload.text || '').trim();
-        // Событие готово: фиксируем черновик и показываем компакт-карточку.
+        draft.reactions = (payload.text || '').trim();
         await this.prisma.intakeEvent.update({
           where: { id: event.id },
           data: {
@@ -397,7 +368,6 @@ export class IntakeService {
       }
     }
 
-    // Сохраняем черновик (для не-финализирующих полей) и курсор.
     await this.prisma.intakeEvent.update({
       where: { id: event.id },
       data: { draft: draft as unknown as Prisma.InputJsonValue },
@@ -406,15 +376,33 @@ export class IntakeService {
     return { messages: out, cursor: nextCursor, status };
   }
 
-  /** Создать записи в дневнике из всех готовых черновиков. */
-  async commit(userId: string, sessionId: string) {
+  /** Создать записи в дневнике из выбранных готовых черновиков. */
+  async commit(userId: string, sessionId: string, selectedEventIds?: string[]) {
     await this.getSessionOwned(userId, sessionId);
-    const events = await this.prisma.intakeEvent.findMany({
+    const drafted = await this.prisma.intakeEvent.findMany({
       where: { sessionId, status: 'drafted' },
       orderBy: { orderIndex: 'asc' },
     });
+
+    let events = drafted;
+    if (Array.isArray(selectedEventIds) && selectedEventIds.length) {
+      const sel = new Set(selectedEventIds);
+      // Невыбранные — в reject (в дневник не уйдут).
+      await Promise.all(
+        drafted
+          .filter((e) => !sel.has(e.id))
+          .map((e) =>
+            this.prisma.intakeEvent.update({
+              where: { id: e.id },
+              data: { status: 'rejected' },
+            }),
+          ),
+      );
+      events = drafted.filter((e) => sel.has(e.id));
+    }
+
     if (events.length === 0) {
-      throw new BadRequestException('Нет готовых ситуаций для сохранения');
+      throw new BadRequestException('Не выбрано ни одной ситуации для сохранения');
     }
 
     const created: { eventId: string; entryId: string; title: string }[] = [];
@@ -451,28 +439,31 @@ export class IntakeService {
         : [
             {
               thought: '',
-              isAutomatic: true,
+              is_automatic: true,
               intensity: 5,
               emotions: [],
-              cognitiveDistortions: [],
+              cognitive_distortions: [],
             },
           ];
     return {
       situation: draft.situation || '',
       thoughts: thoughts.map((t) => ({
         thought: t.thought || '',
-        isAutomatic: t.isAutomatic ?? true,
+        is_automatic: t.is_automatic ?? true,
         intensity: t.intensity ?? 5,
         emotions: (t.emotions || []).map((e) => ({
-          emotionId: e.emotionId,
+          emotion_id: e.emotion_id,
           intensity: e.intensity ?? 5,
         })),
-        cognitiveDistortions: t.cognitiveDistortions ?? [],
+        cognitive_distortions: t.cognitive_distortions ?? [],
       })),
       reactions: draft.reactions || '',
       tags: draft.tags || [],
       entryDate: draft.entryDate,
-    } as CreateCbtEntryDto;
+      // draft — snake_case; CbtService.createEntry прогоняет thoughts через
+      // normalizeThoughts (принимает snake/camel), поэтому каст через unknown
+      // намеренный и не зависит от точного регистра полей DTO.
+    } as unknown as CreateCbtEntryDto;
   }
 
   // ===== чтение =====
@@ -502,7 +493,11 @@ export class IntakeService {
 
   // ===== ходы бота =====
 
-  private emitQuestion(sessionId: string, field: Field, event: { id: string; title: string }) {
+  private emitQuestion(
+    sessionId: string,
+    field: Field,
+    event: { id: string; title: string },
+  ) {
     const eventId = event.id;
     switch (field) {
       case 'thought':
@@ -518,16 +513,8 @@ export class IntakeService {
           sessionId,
           'AI',
           'text',
-          'Что ты при этом почувствовал?',
+          'Что ты при этом почувствовал? Опиши словами или выбери на колесе.',
           { field, eventId, allowWheel: true },
-        );
-      case 'intensity':
-        return this.addMessage(
-          sessionId,
-          'AI',
-          'intensity',
-          'Насколько сильно это ощущалось?',
-          { field, eventId, min: 1, max: 10 },
         );
       case 'reactions':
         return this.addMessage(
@@ -535,7 +522,7 @@ export class IntakeService {
           'AI',
           'text',
           'И что ты сделал — как поступил или отреагировал?',
-          { field, eventId, skippable: true },
+          { field, eventId },
         );
     }
   }
@@ -543,16 +530,17 @@ export class IntakeService {
   private async emitEmotionChips(
     sessionId: string,
     event: { id: string },
-    ids: number[],
+    list: DraftEmotion[],
   ) {
     const cat = await this.ensureCatalog();
-    const suggestions = ids.map((id) => ({
-      emotionId: id,
-      name: cat.byId.get(id)?.name || String(id),
+    const suggestions = list.map((e) => ({
+      emotionId: e.emotion_id,
+      name: cat.byId.get(e.emotion_id)?.name || String(e.emotion_id),
+      intensity: e.intensity,
     }));
-    const content = ids.length
-      ? 'Похоже на это? Поправь, если не так — убери лишнее или добавь своё.'
-      : 'Не уловил конкретную эмоцию. Назови словами или выбери на колесе.';
+    const content = list.length
+      ? 'Похоже на это? Поправь силу или состав — убери лишнее, добавь на колесе.'
+      : 'Не уловил эмоцию. Назови словами или выбери на колесе.';
     return this.addMessage(sessionId, 'AI', 'emotion', content, {
       field: 'emotions',
       eventId: event.id,
@@ -609,7 +597,7 @@ export class IntakeService {
     return this.catalog;
   }
 
-  private async mapEmotions(text: string): Promise<number[]> {
+  private async mapEmotions(text: string): Promise<DraftEmotion[]> {
     if (!text) return [];
     const cat = await this.ensureCatalog();
     const raw = await this.ai.generateText(
@@ -617,38 +605,52 @@ export class IntakeService {
         { role: 'system', content: buildEmotionMappingPrompt(cat.prompt) },
         { role: 'user', content: text },
       ],
-      { responseJson: true, temperature: 0.2, maxTokens: 256 },
+      { responseJson: true, temperature: 0.2, maxTokens: 300 },
     );
-    let ids: number[] = [];
+    let arr: any[] = [];
     try {
       const d = JSON.parse(raw || '{}');
-      const arr = Array.isArray(d) ? d : d?.emotionIds;
-      if (Array.isArray(arr)) ids = arr.map(Number);
+      arr = Array.isArray(d) ? d : d?.emotions || d?.emotionIds || [];
     } catch (e: any) {
       this.logger.warn(`Маппинг эмоций: не разобрал JSON (${e?.message || e})`);
     }
-    return this.dedupeValid(ids, cat, 4);
-  }
-
-  // ===== вспомогательное =====
-
-  private dedupeValid(ids: number[], cat: EmotionCatalog, cap: number): number[] {
     const seen = new Set<number>();
-    const out: number[] = [];
-    for (const v of ids || []) {
-      const n = Number(v);
-      if (Number.isInteger(n) && cat.valid.has(n) && !seen.has(n)) {
-        seen.add(n);
-        out.push(n);
-        if (out.length >= cap) break;
+    const out: DraftEmotion[] = [];
+    for (const item of arr) {
+      const id = Number(
+        item && typeof item === 'object'
+          ? item.id ?? item.emotionId ?? item.emotion_id
+          : item,
+      );
+      const intensity = this.clampIntensity(
+        item && typeof item === 'object' ? item.intensity : undefined,
+      );
+      if (Number.isInteger(id) && cat.valid.has(id) && !seen.has(id)) {
+        seen.add(id);
+        out.push({ emotion_id: id, intensity });
+        if (out.length >= 4) break;
       }
     }
     return out;
   }
 
-  private async sanitizeIds(ids: number[]): Promise<number[]> {
+  // ===== вспомогательное =====
+
+  private async sanitizeEmotions(
+    list: { emotionId: number; intensity: number }[],
+  ): Promise<DraftEmotion[]> {
     const cat = await this.ensureCatalog();
-    return this.dedupeValid(ids || [], cat, 6);
+    const seen = new Set<number>();
+    const out: DraftEmotion[] = [];
+    for (const e of list || []) {
+      const id = Number(e?.emotionId);
+      if (Number.isInteger(id) && cat.valid.has(id) && !seen.has(id)) {
+        seen.add(id);
+        out.push({ emotion_id: id, intensity: this.clampIntensity(e?.intensity) });
+        if (out.length >= 6) break;
+      }
+    }
+    return out;
   }
 
   private ensureThought(draft: EventDraft) {
@@ -656,10 +658,10 @@ export class IntakeService {
       draft.thoughts = [
         {
           thought: '',
-          isAutomatic: true,
+          is_automatic: true,
           intensity: 5,
           emotions: [],
-          cognitiveDistortions: [],
+          cognitive_distortions: [],
         },
       ];
     }
@@ -671,25 +673,18 @@ export class IntakeService {
     return Math.min(10, Math.max(1, n));
   }
 
-  private async renderUserAnswer(
-    field: Field,
-    payload: AnswerPayload,
-  ): Promise<string | null> {
+  private renderUserAnswer(field: Field, payload: AnswerPayload): string | null {
     switch (field) {
       case 'thought':
         return (payload.text || '').trim() || '(без конкретной мысли)';
       case 'emotions':
-        // Логируем только свободный текст; подтверждение чипов — без отдельного пузыря.
-        if (payload.emotionIds == null && payload.text != null) {
+        // Логируем только свободный текст; подтверждение чипов — без пузыря.
+        if (payload.emotions == null && payload.text != null) {
           return (payload.text || '').trim();
         }
         return null;
-      case 'intensity':
-        return null; // выбор кнопкой — без пузыря, итог виден на карточке
       case 'reactions':
-        return payload.skip
-          ? '(пропустил)'
-          : (payload.text || '').trim() || '(пропустил)';
+        return (payload.text || '').trim();
     }
   }
 

@@ -40,9 +40,15 @@ const emotionsStore = useEmotionsStore();
 const thoughts = computed(() =>
 	Array.isArray(props.draft?.thoughts) ? props.draft.thoughts : [],
 );
-const emotions = computed(
-	() => (thoughts.value[0]?.emotions as { emotionId: number; intensity: number }[]) || [],
-);
+// draft хранит эмоции в snake_case (emotion_id); нормализуем к emotionId.
+const emotions = computed<{ emotionId: number; intensity: number }[]>(() => {
+	const raw = thoughts.value[0]?.emotions;
+	if (!Array.isArray(raw)) return [];
+	return raw.map((e: any) => ({
+		emotionId: e.emotionId ?? e.emotion_id,
+		intensity: e.intensity,
+	}));
+});
 
 const meta = computed(() => {
 	const n = thoughts.value.filter((x: any) => x?.thought?.trim()).length;

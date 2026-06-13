@@ -5,7 +5,7 @@
 				← {{ t("common.back", "Назад") }}
 			</button>
 
-			<!-- ===== ВСТУПЛЕНИЕ: запись или текст ===== -->
+			<!-- ===== ВСТУПЛЕНИЕ ===== -->
 			<template v-if="!started">
 				<div class="orb-wrap">
 					<button
@@ -21,9 +21,7 @@
 							<path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Z" fill="currentColor" />
 							<path d="M19 11a7 7 0 0 1-14 0M12 18v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
 						</svg>
-						<span v-else-if="recording" class="rec-wave" aria-hidden="true">
-							<i></i><i></i><i></i><i></i><i></i>
-						</span>
+						<span v-else-if="recording" class="rec-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
 						<span v-else class="rec-spin" aria-hidden="true"></span>
 					</button>
 				</div>
@@ -44,13 +42,7 @@
 
 				<div class="text-fallback">
 					<label class="tf-label" for="cap-text">{{ t("capture.orType", "или опишите словами") }}</label>
-					<textarea
-						id="cap-text"
-						v-model="text"
-						class="tf-area"
-						rows="4"
-						:placeholder="t('capture.placeholder', 'Сегодня на встрече я промолчал, хотя был не согласен…')"
-					></textarea>
+					<textarea id="cap-text" v-model="text" class="tf-area" rows="4" :placeholder="t('capture.placeholder', 'Сегодня на встрече я промолчал, хотя был не согласен…')"></textarea>
 				</div>
 
 				<button class="lamp-btn analyze-btn" :disabled="!canAnalyze || busy" @click="analyzeText">
@@ -65,25 +57,17 @@
 				<div class="thread" ref="threadEl">
 					<div v-for="m in messages" :key="m.id" class="row" :class="m.role === 'USER' ? 'right' : 'left'">
 						<div v-if="m.role === 'USER'" class="bubble user">{{ m.content }}</div>
-
 						<template v-else>
 							<div v-if="m.kind === 'card'" class="card-wrap">
 								<p class="card-cap"><span class="card-dot"></span>{{ t("intake.cardReady", "готова карточка") }}</p>
-								<EventCardCompact
-									:title="m.payload?.title || ''"
-									:draft="m.payload?.draft || {}"
-									:entry-id="entryIdFor(m)"
-									@open="openEntry"
-								/>
+								<EventCardCompact :title="m.payload?.title || ''" :draft="m.payload?.draft || {}" :entry-id="entryIdFor(m)" @open="openEntry" />
 							</div>
 							<div v-else-if="m.content" class="bubble ai">{{ m.content }}</div>
 						</template>
 					</div>
-
 					<div v-if="busy" class="thinking" aria-label="думает"><i></i><i></i><i></i></div>
 				</div>
 
-				<!-- зона ввода зависит от последнего хода -->
 				<div class="inputzone">
 					<p v-if="error" class="err-note">{{ error }}</p>
 
@@ -91,7 +75,7 @@
 					<template v-if="isSegment">
 						<div class="opts">
 							<button v-for="o in segOptions" :key="o.id" class="opt" :class="{ on: !!selected[o.id] }" @click="toggleSel(o.id)">
-								<span class="tick"><i v-if="selected[o.id]" class="ti ti-check"></i></span>{{ o.label }}
+								<span class="tick"><svg v-if="selected[o.id]" class="i-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l4 4 10-10" /></svg></span>{{ o.label }}
 							</button>
 						</div>
 						<button class="lamp-btn wide" :disabled="selCount === 0 || busy" @click="doSelect">
@@ -99,53 +83,66 @@
 						</button>
 					</template>
 
-					<!-- эмоции: чипы + правка -->
-					<template v-else-if="isEmotion">
-						<div class="echips">
-							<span v-for="(id, i) in emotionEdit" :key="id" class="echip">
-								<span class="dot" :style="{ background: dotColor(id) }"></span>{{ emoName(id) }}
-								<button class="x" @click="removeEmotion(i)" aria-label="убрать">×</button>
-							</span>
-							<span v-if="!emotionEdit.length" class="echip muted">{{ t("intake.noEmotionsYet", "ничего не выбрано") }}</span>
-						</div>
-						<div class="btn-row">
-							<button class="lamp-btn" :disabled="busy" @click="confirmEmotions">{{ t("common.confirm", "Подтвердить") }}</button>
-							<button class="ghost-btn" :disabled="busy" @click="confirmNoEmotions">{{ t("intake.noEmotions", "без эмоций") }}</button>
-						</div>
-						<div class="composer">
-							<input v-model="composer" class="cin" :placeholder="t('intake.feelWords', 'или опиши чувства словами…')" @keydown.enter.prevent="sendText" />
-							<button class="send" :disabled="!composer.trim() || busy" @click="sendText" aria-label="отправить"><i class="ti ti-arrow-up"></i></button>
-						</div>
-					</template>
-
-					<!-- интенсивность -->
-					<template v-else-if="isIntensity">
-						<div class="nums">
-							<button v-for="n in 10" :key="n" class="num" :disabled="busy" @click="sendIntensity(n)">{{ n }}</button>
-						</div>
-					</template>
-
-					<!-- сохранить всё -->
-					<template v-else-if="isCommit">
-						<button class="lamp-btn wide" :disabled="busy" @click="commit">{{ t("intake.saveAll", "Сохранить всё") }}</button>
-					</template>
-
-					<!-- готово -->
+					<!-- финал: выбор, что сохранить -->
 					<template v-else-if="status === 'done'">
 						<button class="lamp-btn wide" @click="router.push('/diary')">{{ t("intake.openDiary", "Открыть дневник") }}</button>
 					</template>
 
-					<!-- свободный текст (мысль / чувства-вопрос / реакция) -->
-					<template v-else-if="composerActive">
+					<template v-else-if="status === 'review'">
+						<p class="review-cap">{{ t("intake.reviewCap", "Что сохранить в дневник?") }}</p>
+						<div class="review-list">
+							<div v-for="ev in reviewEvents" :key="ev.id" class="rc" :class="{ off: !reviewSel[ev.id] }" @click="toggleReview(ev.id)" role="button">
+								<span class="rc-tick"><svg v-if="reviewSel[ev.id]" class="i-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l4 4 10-10" /></svg></span>
+								<EventCardCompact class="rc-card" :title="ev.title" :draft="ev.draft" :entry-id="null" />
+							</div>
+						</div>
+						<button class="lamp-btn wide" :disabled="reviewCount === 0 || busy" @click="saveSelected">
+							{{ t("intake.saveSelected", "Сохранить выбранные") }} ({{ reviewCount }})
+						</button>
+					</template>
+
+					<!-- эмоции: чипы с интенсивностью + колесо + свободный текст -->
+					<template v-else-if="cursor && cursor.field === 'emotions'">
+						<div v-if="emotionEdit.length" class="echips">
+							<span v-for="(em, i) in emotionEdit" :key="em.emotionId" class="echip" @click="openWheel" role="button">
+								<span class="dot" :style="{ background: dotColor(em.emotionId) }"></span>{{ emoName(em.emotionId) }}<b class="ei">{{ em.intensity }}</b>
+								<button class="x" @click.stop="removeEmotion(i)" aria-label="убрать">×</button>
+							</span>
+						</div>
+						<button class="wheel-btn" :disabled="busy" @click="openWheel">
+							<svg class="i-svg wheel-i" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /></svg>
+							{{ emotionEdit.length ? t("intake.wheelMore", "добавить / изменить на колесе") : t("intake.wheelPick", "выбрать на колесе") }}
+						</button>
+						<div class="composer">
+							<input v-model="composer" class="cin" :placeholder="t('intake.feelWords', 'или опиши чувства словами…')" @keydown.enter.prevent="sendText" />
+							<button class="send" :disabled="!composer.trim() || busy" @click="sendText" aria-label="отправить">
+								<svg class="i-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5" /><path d="M5 12l7-7 7 7" /></svg>
+							</button>
+						</div>
+						<button class="lamp-btn wide" :disabled="emotionEdit.length === 0 || busy" @click="confirmEmotions">
+							{{ t("common.done", "Готово") }}
+						</button>
+					</template>
+
+					<!-- мысль / реакция: свободный текст (обязательно) -->
+					<template v-else-if="cursor && (cursor.field === 'thought' || cursor.field === 'reactions')">
 						<div class="composer">
 							<input v-model="composer" class="cin" :placeholder="composerPlaceholder" @keydown.enter.prevent="sendText" />
-							<button v-if="isReactions" class="ghost-btn slim" :disabled="busy" @click="skipReactions">{{ t("intake.skip", "пропустить") }}</button>
-							<button class="send" :disabled="!composer.trim() || busy" @click="sendText" aria-label="отправить"><i class="ti ti-arrow-up"></i></button>
+							<button class="send" :disabled="!composer.trim() || busy" @click="sendText" aria-label="отправить">
+								<svg class="i-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5" /><path d="M5 12l7-7 7 7" /></svg>
+							</button>
 						</div>
 					</template>
 				</div>
 			</template>
 		</div>
+
+		<CbdEmotionWheelPicker
+			v-model="showWheel"
+			:categories="wheelCategories"
+			:emotions="wheelEmotions"
+			@select="onWheelSelect"
+		/>
 	</div>
 </template>
 
@@ -153,6 +150,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import EventCardCompact from "../components/EventCardCompact.vue";
+import { CbdEmotionWheelPicker } from "../components/ui";
 import { useLocalization } from "../composables/useLocalization";
 import { useIntake } from "../composables/useIntake";
 import { useEmotionsStore } from "../stores/emotions";
@@ -164,9 +162,25 @@ const emotionsStore = useEmotionsStore();
 
 onMounted(() => {
 	// Каталог эмоций нужен для чипов и карточек (имя + цвет категории).
-	// Идемпотентно: loadAll сам пропустит, если данные свежие.
 	emotionsStore.loadAll().catch(() => {});
 });
+
+// Данные для колеса эмоций (как в AddEntry: переведённое имя + snake-алиасы).
+const wheelCategories = computed<any[]>(() =>
+	emotionsStore.emotionCategories.map((c: any) => ({
+		...c,
+		name: t(c.nameKey, c.name || ""),
+		name_key: c.nameKey,
+	})),
+);
+const wheelEmotions = computed<any[]>(() =>
+	emotionsStore.emotions.map((e: any) => ({
+		...e,
+		name: t(e.nameKey, e.name || ""),
+		name_key: e.nameKey,
+		category_id: e.categoryId,
+	})),
+);
 
 const {
 	messages,
@@ -252,46 +266,27 @@ async function toggleRecord() {
 }
 function stopRecord() {
 	recording.value = false;
-	try {
-		mediaRecorder?.stop();
-	} catch {
-		/* noop */
-	}
+	try { mediaRecorder?.stop(); } catch { /* noop */ }
 }
 function cleanupStream() {
 	stream?.getTracks().forEach((tr) => tr.stop());
 	stream = null;
 }
 onBeforeUnmount(() => {
-	try {
-		mediaRecorder?.stop();
-	} catch {
-		/* noop */
-	}
+	try { mediaRecorder?.stop(); } catch { /* noop */ }
 	cleanupStream();
 });
 
-// ---- зона ввода по последнему ходу ----
+// ---- зона ввода ----
 const isSegment = computed(
 	() => lastMessage.value?.kind === "buttons" && !!lastMessage.value?.payload?.multi,
 );
 const segOptions = computed<{ id: string; label: string; value: string }[]>(
 	() => lastMessage.value?.payload?.options || [],
 );
-const isEmotion = computed(() => lastMessage.value?.kind === "emotion");
-const isIntensity = computed(() => lastMessage.value?.kind === "intensity");
-const isCommit = computed(
-	() => lastMessage.value?.kind === "buttons" && lastMessage.value?.payload?.action === "commit",
-);
-const isReactions = computed(() => cursor.value?.field === "reactions");
-const composerActive = computed(() => {
-	const f = cursor.value?.field;
-	return f === "thought" || f === "emotions" || f === "reactions";
-});
 const composerPlaceholder = computed(() => {
 	const f = cursor.value?.field;
 	if (f === "thought") return t("intake.phThought", "что промелькнуло в голове…");
-	if (f === "emotions") return t("intake.phFeel", "опиши, что почувствовал…");
 	if (f === "reactions") return t("intake.phReact", "что сделал, как поступил…");
 	return t("intake.phAnswer", "ответь словами…");
 });
@@ -307,19 +302,35 @@ function doSelect() {
 	selectEvents(ids);
 }
 
-// эмоции
-const emotionEdit = ref<number[]>([]);
+// эмоции (у каждой — своя интенсивность)
+const emotionEdit = ref<{ emotionId: number; intensity: number }[]>([]);
+const showWheel = ref(false);
 function removeEmotion(i: number) {
 	emotionEdit.value.splice(i, 1);
 }
-function confirmEmotions() {
-	sendAnswer({ emotionIds: [...emotionEdit.value] });
+function openWheel() {
+	showWheel.value = true;
 }
-function confirmNoEmotions() {
-	sendAnswer({ emotionIds: [] });
+function onWheelSelect(e: any) {
+	const id = Number(e?.emotionId);
+	if (!Number.isInteger(id)) return;
+	const intensity = clampInt(e?.intensity);
+	const existing = emotionEdit.value.find((x) => x.emotionId === id);
+	if (existing) existing.intensity = intensity;
+	else if (emotionEdit.value.length < 6) emotionEdit.value.push({ emotionId: id, intensity });
+	showWheel.value = false;
+}
+function confirmEmotions() {
+	if (!emotionEdit.value.length) return;
+	sendAnswer({ emotions: emotionEdit.value.map((e) => ({ ...e })) });
+}
+function clampInt(v: any): number {
+	const n = Math.round(Number(v));
+	if (!Number.isFinite(n)) return 5;
+	return Math.min(10, Math.max(1, n));
 }
 
-// текст / интенсивность / реакция
+// текст (мысль / реакция / свободные эмоции)
 const composer = ref("");
 function sendText() {
 	const v = composer.value.trim();
@@ -327,11 +338,18 @@ function sendText() {
 	composer.value = "";
 	sendAnswer({ text: v });
 }
-function sendIntensity(n: number) {
-	sendAnswer({ intensity: n });
+
+// финальный выбор карточек
+const reviewSel = ref<Record<string, boolean>>({});
+const reviewEvents = computed(() => events.value.filter((e) => e.status === "drafted"));
+const reviewCount = computed(() => Object.values(reviewSel.value).filter(Boolean).length);
+function toggleReview(id: string) {
+	reviewSel.value[id] = !reviewSel.value[id];
 }
-function skipReactions() {
-	sendAnswer({ skip: true });
+function saveSelected() {
+	const ids = Object.keys(reviewSel.value).filter((id) => reviewSel.value[id]);
+	if (!ids.length) return;
+	commit(ids);
 }
 
 // карточка → запись
@@ -360,7 +378,21 @@ watch(lastMessage, (m) => {
 		for (const o of m.payload.options || []) sel[o.id] = true;
 		selected.value = sel;
 	} else if (m.kind === "emotion") {
-		emotionEdit.value = (m.payload?.suggestions || []).map((s: any) => s.emotionId);
+		emotionEdit.value = (m.payload?.suggestions || []).map((s: any) => ({
+			emotionId: s.emotionId,
+			intensity: clampInt(s.intensity),
+		}));
+	} else if (m.kind === "text" && m.payload?.field === "emotions") {
+		// свежий вопрос про эмоции для нового события — чистим чипы
+		emotionEdit.value = [];
+	}
+	scrollSoon();
+});
+watch(status, (s) => {
+	if (s === "review") {
+		const sel: Record<string, boolean> = {};
+		for (const ev of events.value.filter((e) => e.status === "drafted")) sel[ev.id] = true;
+		reviewSel.value = sel;
 	}
 	scrollSoon();
 });
@@ -381,42 +413,16 @@ function goBack() {
 </script>
 
 <style scoped>
-.capture-page {
-	display: flex;
-	justify-content: center;
-	min-height: 100dvh;
-}
-.capture-inner {
-	width: 100%;
-	max-width: 440px;
-	padding: max(5dvh, 28px) 24px 40px;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	text-align: center;
-}
-.capture-inner.is-chat {
-	align-items: stretch;
-	text-align: left;
-	padding-bottom: 16px;
-	height: 100dvh;
-	box-sizing: border-box;
-}
-.back-btn {
-	align-self: flex-start;
-	font-size: 15px;
-	margin-bottom: max(3dvh, 18px);
-}
+.capture-page { display: flex; justify-content: center; min-height: 100dvh; }
+.capture-inner { width: 100%; max-width: 440px; padding: max(5dvh, 28px) 24px 40px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.capture-inner.is-chat { align-items: stretch; text-align: left; padding-bottom: 16px; height: 100dvh; box-sizing: border-box; }
+.back-btn { align-self: flex-start; font-size: 15px; margin-bottom: max(3dvh, 18px); }
+
+.i-svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; flex: 0 0 auto; }
 
 /* ===== Орб ===== */
 .orb-wrap { margin-top: max(2dvh, 12px); display: grid; place-items: center; }
-.rec-orb {
-	position: relative; width: 150px; height: 150px; border-radius: 50%;
-	border: none; cursor: pointer; display: grid; place-items: center; color: #181203;
-	background: radial-gradient(circle at 50% 38%, #f7c887 0%, var(--lamp) 55%, var(--lamp-deep) 100%);
-	box-shadow: 0 0 0 1px rgba(240,178,100,.35), 0 20px 60px -14px rgba(240,178,100,.55), 0 0 90px -8px rgba(240,178,100,.35);
-	transition: transform .12s ease;
-}
+.rec-orb { position: relative; width: 150px; height: 150px; border-radius: 50%; border: none; cursor: pointer; display: grid; place-items: center; color: #181203; background: radial-gradient(circle at 50% 38%, #f7c887 0%, var(--lamp) 55%, var(--lamp-deep) 100%); box-shadow: 0 0 0 1px rgba(240,178,100,.35), 0 20px 60px -14px rgba(240,178,100,.55), 0 0 90px -8px rgba(240,178,100,.35); transition: transform .12s ease; }
 .rec-orb:active { transform: scale(.97); }
 .rec-orb:disabled { cursor: default; }
 .rec-mic { width: 52px; height: 52px; z-index: 1; }
@@ -436,22 +442,18 @@ function goBack() {
 
 .capture-h1 { font-family: "Spectral", Georgia, serif; font-weight: 500; font-size: 26px; line-height: 1.12; letter-spacing: -.01em; margin: 28px 0 0; }
 .capture-hint { font-size: 15px; line-height: 1.5; color: var(--paper-dim); margin: 10px 0 0; max-width: 32ch; }
-
 .smer { margin-top: max(4dvh, 26px); width: 100%; }
 .smer-cap { font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--paper-dim); margin: 0 0 12px; }
 .smer-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .smer-chip { font-size: 13px; color: var(--paper-faint); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; }
 .smer-chip b { color: var(--lamp); font-weight: 600; }
-
 .text-fallback { margin-top: max(4dvh, 26px); width: 100%; text-align: left; }
 .tf-label { display: block; font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--paper-dim); margin-bottom: 8px; }
 .tf-area { width: 100%; resize: vertical; min-height: 96px; background: rgba(26,31,43,.6); border: 1px solid var(--line); border-radius: 14px; padding: 13px 15px; color: var(--paper); font-family: inherit; font-size: 15px; line-height: 1.5; outline: none; transition: border-color .2s ease; }
 .tf-area::placeholder { color: rgba(151,144,126,.55); }
 .tf-area:focus { border-color: rgba(240,178,100,.55); }
-
 .analyze-btn { margin-top: 20px; width: 100%; height: 54px; border-radius: 16px; font-size: 16px; }
 .analyze-btn:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
-
 .err-note { margin: 14px 0 0; font-size: 13px; color: var(--coral, #e26d5c); line-height: 1.45; }
 
 /* ===== Чат ===== */
@@ -462,11 +464,9 @@ function goBack() {
 .bubble { max-width: 86%; border-radius: 14px; padding: 11px 13px; font-size: 14.5px; line-height: 1.45; }
 .bubble.user { background: var(--lamp); color: #241a06; }
 .bubble.ai { background: rgba(26,31,43,.92); border: .5px solid var(--line); color: var(--paper); }
-
 .card-wrap { width: 100%; max-width: 92%; }
 .card-cap { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--paper-dim); margin: 0 0 7px; }
 .card-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--lamp); }
-
 .thinking { display: flex; gap: 5px; padding: 6px 2px; }
 .thinking i { width: 6px; height: 6px; border-radius: 50%; background: var(--lamp); opacity: .5; animation: think 1.2s ease-in-out infinite; }
 .thinking i:nth-child(2) { animation-delay: .2s; }
@@ -477,29 +477,34 @@ function goBack() {
 .opts { display: flex; flex-direction: column; gap: 7px; }
 .opt { display: flex; align-items: center; gap: 9px; background: rgba(26,31,43,.7); border: .5px solid var(--line); border-radius: 11px; padding: 10px 11px; font-size: 14px; color: var(--paper); text-align: left; cursor: pointer; }
 .opt.on { border-color: rgba(240,178,100,.5); }
-.tick { width: 18px; height: 18px; border-radius: 6px; background: rgba(237,230,214,.08); display: flex; align-items: center; justify-content: center; font-size: 12px; color: #241a06; flex: 0 0 auto; }
+.tick { width: 18px; height: 18px; border-radius: 6px; background: rgba(237,230,214,.08); display: flex; align-items: center; justify-content: center; color: #241a06; flex: 0 0 auto; }
+.tick .i-svg { width: 13px; height: 13px; stroke-width: 2.6; }
 .opt.on .tick { background: var(--lamp); }
 
 .echips { display: flex; flex-wrap: wrap; gap: 7px; }
-.echip { display: inline-flex; align-items: center; gap: 6px; border: .5px solid var(--line); border-radius: 999px; padding: 5px 8px 5px 10px; font-size: 13px; color: var(--paper); }
-.echip.muted { color: var(--paper-dim); }
+.echip { display: inline-flex; align-items: center; gap: 6px; border: .5px solid var(--line); border-radius: 999px; padding: 5px 8px 5px 10px; font-size: 13px; color: var(--paper); cursor: pointer; }
 .echip .dot { width: 7px; height: 7px; border-radius: 50%; }
+.echip .ei { font-weight: 600; color: var(--lamp); font-size: 12px; margin-left: 1px; }
 .echip .x { border: none; background: none; color: var(--paper-dim); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px; }
 
-.btn-row { display: flex; gap: 10px; align-items: center; }
-.ghost-btn { background: none; border: .5px solid var(--line); color: var(--paper-dim); border-radius: 11px; padding: 9px 14px; font-size: 13px; cursor: pointer; }
-.ghost-btn.slim { padding: 8px 11px; }
-
-.nums { display: flex; flex-wrap: wrap; gap: 6px; }
-.num { width: 30px; height: 34px; border-radius: 8px; border: .5px solid var(--line); background: rgba(26,31,43,.6); color: var(--paper); font-size: 14px; cursor: pointer; }
-.num:active { background: var(--lamp); color: #241a06; }
+.wheel-btn { align-self: flex-start; display: inline-flex; align-items: center; gap: 7px; background: none; border: .5px solid rgba(240,178,100,.5); color: var(--lamp); border-radius: 11px; padding: 8px 13px; font-size: 13px; cursor: pointer; }
+.wheel-i { width: 15px; height: 15px; stroke-width: 1.8; }
 
 .composer { display: flex; align-items: center; gap: 8px; }
 .cin { flex: 1; background: rgba(26,31,43,.6); border: .5px solid var(--line); border-radius: 999px; padding: 10px 15px; color: var(--paper); font-family: inherit; font-size: 14.5px; outline: none; }
 .cin:focus { border-color: rgba(240,178,100,.55); }
 .cin::placeholder { color: rgba(151,144,126,.55); }
-.send { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 50%; border: none; background: var(--lamp); color: #241a06; font-size: 17px; display: grid; place-items: center; cursor: pointer; }
+.send { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 50%; border: none; background: var(--lamp); color: #241a06; display: grid; place-items: center; cursor: pointer; }
 .send:disabled { opacity: .4; cursor: not-allowed; }
+
+.review-cap { font-size: 12px; letter-spacing: .07em; text-transform: uppercase; color: var(--paper-dim); margin: 0; }
+.review-list { display: flex; flex-direction: column; gap: 9px; }
+.rc { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; transition: opacity .15s ease; }
+.rc.off { opacity: .42; }
+.rc-tick { margin-top: 14px; width: 20px; height: 20px; border-radius: 6px; border: .5px solid var(--line); background: var(--lamp); color: #241a06; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.rc.off .rc-tick { background: transparent; }
+.rc-tick .i-svg { width: 13px; height: 13px; stroke-width: 2.6; }
+.rc-card { flex: 1; min-width: 0; pointer-events: none; }
 
 .lamp-btn.wide { width: 100%; }
 

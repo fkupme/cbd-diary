@@ -45,9 +45,7 @@ export interface IntakeMessage {
 
 export interface AnswerPayload {
 	text?: string;
-	emotionIds?: number[];
-	intensity?: number;
-	skip?: boolean;
+	emotions?: { emotionId: number; intensity: number }[];
 }
 
 export interface CommittedEntry {
@@ -147,9 +145,12 @@ class IntakeApiService {
 
 	async commit(
 		id: string,
+		selectedEventIds?: string[],
 	): Promise<{ created: CommittedEntry[]; message: IntakeMessage }> {
 		return this.unwrap(
-			await apiClient.request('POST', API_CONFIG.ENDPOINTS.INTAKE.COMMIT(id)),
+			await apiClient.request('POST', API_CONFIG.ENDPOINTS.INTAKE.COMMIT(id), {
+				selectedEventIds,
+			}),
 		);
 	}
 }
