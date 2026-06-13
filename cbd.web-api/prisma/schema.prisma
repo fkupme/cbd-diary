@@ -48,6 +48,7 @@ model User {
   chats          Chat[]
   devicePushTokens DevicePushToken[]
   userBeliefs   UserBelief[]
+  intakeSessions IntakeSession[]
 
   @@map("users")
 }
@@ -386,4 +387,75 @@ model DevicePushToken {
 
   @@index([userId], name: "idx_device_push_token_user")
   @@map("device_push_tokens")
+}
+
+// === ГОЛОСОВОЙ ЗАХВАТ СОБЫТИЯ (INTAKE «разложить по полочкам») ===
+// Отдельный от Chat поток: Chat оспаривает убеждения в ГОТОВОЙ записи
+// (привязан к cbtEntryId), а intake СОЗДАЁТ записи из голосовой заметки.
+
+enum IntakeMessageRole {
+  USER
+  AI
+  SYSTEM
+}
+
+model IntakeSession {
+  id     String @id @default(uuid())
+  userId String @map("user_id")
+
+  // transcribing | segmenting | selecting | interviewing | review | committing | done | abandoned
+  status     String @default("transcribing") @db.VarChar(24)
+  transcript String @default("")
+  // Артефакты автомата: указатель интервью {eventIndex, field}, флаги и т.п.
+  stateData  Json   @default("{}") @map("state_data")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events   IntakeEvent[]
+  messages IntakeMessage[]
+
+  @@index([userId, createdAt(sort: Desc)], name: "idx_intake_sessions_user_created")
+  @@map("intake_sessions")
+}
+
+model IntakeEvent {
+  id         String @id @default(uuid())
+  sessionId  String @map("session_id")
+  orderIndex Int    @default(0) @map("order_index")
+  title      String
+
+  // candidate | selected | rejected | interviewing | drafted | created
+  status String @default("candidate") @db.VarChar(16)
+  // Черновик будущей записи в форме CreateCbtEntryDto
+  // (situation, thoughts[], reactions, tags...). На commit уходит как есть.
+  draft  Json   @default("{}")
+
+  createdEntryId String? @map("created_entry_id") // id созданной cbt_entry после commit
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  session IntakeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, orderIndex], name: "idx_intake_events_session_order")
+  @@map("intake_events")
+}
+
+model IntakeMessage {
+  id        String            @id @default(uuid())
+  sessionId String            @map("session_id")
+  role      IntakeMessageRole
+  // transcript | text | buttons | emotion | intensity | card
+  kind      String            @default("text") @db.VarChar(16)
+  content   String            @default("")
+  // Нагрузка по kind: buttons→{options,multi}, card→{eventId,...}, emotion→{suggestions}
+  payload   Json              @default("{}")
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  session IntakeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt], name: "idx_intake_messages_session_created")
+  @@map("intake_messages")
 }

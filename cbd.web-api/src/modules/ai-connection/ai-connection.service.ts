@@ -20,9 +20,13 @@ interface GenerateOpts {
   responseJson?: boolean;
 }
 
+type GeminiPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } };
+
 interface GeminiContent {
   role: 'user' | 'model';
-  parts: { text: string }[];
+  parts: GeminiPart[];
 }
 
 interface GeminiRequestBody {
@@ -259,6 +263,70 @@ export class AiConnectionService {
     } catch (e: any) {
       this.logger.error(`Gemini stream failed: ${e?.message || e}`);
       return full;
+    }
+  }
+
+  /**
+   * Расшифровка голосовой заметки в текст мультимодальным Gemini (inline base64).
+   * Для коротких заметок (до ~1 мин) inline-данных достаточно; длинные стоит
+   * слать через Files API (не реализовано). temperature=0 — дословно, без фантазий.
+   */
+  async transcribeAudio(
+    audioBase64: string,
+    mimeType: string,
+    opts?: { model?: string; instruction?: string; maxTokens?: number },
+  ): Promise<string> {
+    if (!this.apiKey) {
+      this.logger.warn('GEMINI_API_KEY is not set');
+      return '';
+    }
+    const model = opts?.model || this.defaultModel;
+    const instruction =
+      opts?.instruction ||
+      'Расшифруй это голосовое сообщение дословно, на языке оригинала. ' +
+        'Верни ТОЛЬКО текст расшифровки — без кавычек, пояснений, таймкодов и эмодзи. ' +
+        'Сохраняй разговорную речь как есть, включая нецензурные слова. ' +
+        'Если речи нет — верни пустую строку.';
+    const body: GeminiRequestBody = {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: instruction },
+            { inlineData: { mimeType, data: audioBase64 } },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens:
+          typeof opts?.maxTokens === 'number' ? opts.maxTokens : 2048,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    };
+    try {
+      const approxBytes = Math.round((audioBase64.length * 3) / 4);
+      this.logger.log(
+        `Gemini(transcribe): model=${model}, mime=${mimeType}, ~${approxBytes}B`,
+      );
+      const res = await this.fetchWithRetry(
+        `${this.baseUrl}/models/${model}:generateContent`,
+        body,
+      );
+      if (!res.ok) {
+        const errText = await res.text();
+        this.logger.error(
+          `Gemini transcribe ${res.status}: ${errText.slice(0, 300)}`,
+        );
+        return '';
+      }
+      const data = await res.json();
+      const text = this.extractText(data).trim();
+      this.logger.log(`Gemini(transcribe): длина=${text.length}`);
+      return text;
+    } catch (e: any) {
+      this.logger.error(`Gemini transcribe failed: ${e?.message || e}`);
+      return '';
     }
   }
 

@@ -16,6 +16,7 @@ import { CbtModule } from './modules/cbt/cbt.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { EmotionsModule } from './modules/emotions/emotions.module';
 import { I18nModule } from './modules/i18n/i18n.module';
+import { IntakeModule } from './modules/intake/intake.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { UsersModule } from './modules/users/users.module';
@@ -69,6 +70,7 @@ import { UsersModule } from './modules/users/users.module';
     ChatModule,
     AiConnectionModule,
     NotificationsModule,
+    IntakeModule,
   ],
   controllers: [AppController],
   providers: [

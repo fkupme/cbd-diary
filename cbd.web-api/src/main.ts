@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/logging/all-exceptions.filter';
@@ -11,7 +12,13 @@ import { HttpLoggingInterceptor } from './common/logging/http-logging.intercepto
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
+    bodyParser: false,
   });
+
+  // Свой JSON-парсер с поднятым лимитом: голосовой intake шлёт аудио base64,
+  // дефолтные 100kb express рубят его как 413. Штатный bodyParser отключён выше.
+  app.use(json({ limit: '25mb' }));
+  app.use(urlencoded({ extended: true, limit: '25mb' }));
 
   app.useLogger(app.get(Logger));
 

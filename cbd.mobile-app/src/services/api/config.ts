@@ -55,6 +55,19 @@ export const API_CONFIG = {
 			FINALIZE: (chatId: string) => `/chat/${chatId}/finalize`,
 		},
 
+		// Intake endpoints (голосовой захват «разложить по полочкам»)
+		INTAKE: {
+			SESSIONS: '/intake/sessions',
+			SESSION: (id: string) => `/intake/sessions/${id}`,
+			MESSAGES: (id: string) => `/intake/sessions/${id}/messages`,
+			TRANSCRIBE: (id: string) => `/intake/sessions/${id}/transcribe`,
+			TRANSCRIPT: (id: string) => `/intake/sessions/${id}/transcript`,
+			SEGMENT: (id: string) => `/intake/sessions/${id}/segment`,
+			SELECT: (id: string) => `/intake/sessions/${id}/select`,
+			ANSWER: (id: string) => `/intake/sessions/${id}/answer`,
+			COMMIT: (id: string) => `/intake/sessions/${id}/commit`,
+		},
+
 		// Analytics endpoints
 		ANALYTICS: {
 			USER_STATS: '/analytics/user-stats',
